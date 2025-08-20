@@ -71,13 +71,8 @@ interface IProposalManagement {
         uint256 _proposalId
     ) external;
 
-    function updateDAOProposalStatus__Manual(uint256 _proposalId, ProposalStatus _proposalStatus) external;
-
-    function updateDAOProposalStatus__Automated(
-        uint256 _totalMembersCount, 
-        uint256 _negativeVotes, 
-        uint256 _positiveVotes,
-        Proposal memory _proposal
+    function updateDAOProposalStatus__FailOrSuccess(
+        uint256 _proposalId
     ) external;
 
     function getAllDAOProposals() external view returns (Proposal[] memory);
@@ -85,5 +80,4 @@ interface IProposalManagement {
     function getProposalById(uint256 _proposalId) external view returns (Proposal memory);
 
     function getMemberProposals(address _memberAddress) external view returns (Proposal[] memory);
-
 }
