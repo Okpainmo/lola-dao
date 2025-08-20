@@ -3,22 +3,32 @@ pragma solidity ^0.8.20;
 import "../ProposalManagement.sol";
 
 contract Core__Proposals is ProposalManagement {
-    error ProposalAndVotingCore__ZeroAddressError();
+    error ProposalCore__ZeroAddressError();
 
     event Logs(string message, uint256 timestamp, string indexed contractName);
 
+    function _verifyIsAddress(address _address) internal override pure {
+        if (_address == address(0)) {
+            revert ProposalCore__ZeroAddressError();
+        }
+    }
 
     string private constant CONTRACT_NAME = "Core__Proposals"; // set in one place to avoid mispelling elsewhere
 
-    constructor(address _adminManagementCoreContractAddress) {
-        if(_adminManagementCoreContractAddress == address(0)) {
-            revert ProposalAndVotingCore__ZeroAddressError();
-        }
+    constructor(
+        address _adminManagementCoreContractAddress 
+        // address _votingCoreContractAddress, 
+        // address _membershipCoreContractAddress
+    ) {
+        _verifyIsAddress(_adminManagementCoreContractAddress);
+        // _verifyIsAddress(_votingCoreContractAddress);
+        // _verifyIsAddress(_membershipCoreContractAddress);
 
         // i_owner(variable) - from ProposalManagement.sol -> OnlyOwnerAuth.sol
         i_owner = msg.sender;
         s_adminManagementCoreContractAddress = _adminManagementCoreContractAddress; // needed to check admin rights and likely more
-        // s_lolaUSDCoreContractAddress = _lolaUSDCoreContractAddress; // needed for checking users' balance to ensure requirements are met for voting, and likely more
+        // s_votingCoreContractAddress = _votingCoreContractAddress;
+        // s_membershipCoreContractAddress = _membershipCoreContractAddress;
 
          emit Logs(
             "contract deployed successfully with constructor chores completed",
@@ -36,11 +46,21 @@ contract Core__Proposals is ProposalManagement {
     }
 
     function updateAdminManagementCoreContractAddress(address _newAddress) public {
-         if(_newAddress == address(0)) {
-            revert ProposalAndVotingCore__ZeroAddressError();
-        }
+        _verifyIsAddress(_newAddress);
 
         s_adminManagementCoreContractAddress = _newAddress;
+    }
+
+    function updateVotingCoreContractAddress(address _newAddress) public {
+        _verifyIsAddress(_newAddress);
+
+        s_votingCoreContractAddress = _newAddress;
+    }
+
+    function updateMembershipCoreContractAddress(address _newAddress) public {
+        _verifyIsAddress(_newAddress);
+
+        s_membershipCoreContractAddress = _newAddress;
     }
 
     function ping() external view returns (string memory, address, uint256) {
