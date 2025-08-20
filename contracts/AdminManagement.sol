@@ -39,7 +39,7 @@ contract AdminManagement is AdminAuth {
 
     string private constant CURRENT_CONTRACT_NAME = "AdminManagement"; // keep name in one variable to avoid mispelling it at any point
 
-    function _verifyIsAddress(address _address) private pure {
+    function _verifyIsAddress(address _address) internal virtual pure {
         if (_address == address(0)) {
             revert AdminManagement__ZeroAddressError();
         }

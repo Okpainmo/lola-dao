@@ -9,23 +9,23 @@ import "./interfaces/Interface__ProposalManagement.sol";
 import "./interfaces/Interface__Membership.sol";
 
 contract Voting is MembershipAuth, OnlyOwnerAuth {
-    error Voting__NotDAOMember();
-    error Voting__ZeroAddressError();
+    // error Voting__NotDAOMember();
+    // error Voting__ZeroAddressError();
     // error Voting__InvalidMemberId();
     error Voting__InvalidIdError();
     error Voting__EmptyProposalCodeName();
-    error Voting__NoExistingVote();
+    // error Voting__NoExistingVote();
     error Voting__NoMutipleVoting();
-    error Voting__CannotDeleteQueuedVote();
+    // error Voting__CannotDeleteQueuedVote();
     error Voting__InsufficientVotingBalance();
     error Voting__ProposalIsNotActive();
+    // error Voting__VotingIsCompleted(IProposalManagement.ProposalStatus _proposalStatus);
 
     enum VoteAction { Approve, Reject }
 
     /* NB: only the proposal id(which cannot changed or be updated) should be added(linked) to a vote. This will 
     prevent the need to handle the gas-intensive process of having to update all platform votes(in case of 
     a proposal update) - to reflect the update on the(their) parent proposal */
-
     struct Vote {
         uint256 id;
         uint256 addedAt;           
@@ -53,12 +53,12 @@ contract Voting is MembershipAuth, OnlyOwnerAuth {
     mapping(uint256 => Vote) public voteIdToVote;
 
     address internal s_lolaUSDCoreContractAddress;
-    address internal s_proposalManagementContractAddress;
-    address internal s_membershipContractAddress;
+    address internal s_proposalManagementCoreContractAddress;
+    // address internal s_membershipContractAddress;
 
     ILolaUSD internal lolaUSDContract = ILolaUSD(s_lolaUSDCoreContractAddress);
-    IProposalManagement internal proposalManagementContract = IProposalManagement(s_proposalManagementContractAddress);
-    IMembership internal membershipContract = IMembership(s_membershipContractAddress);
+    IProposalManagement internal proposalManagementContract = IProposalManagement(s_proposalManagementCoreContractAddress);
+    // IMembership internal membershipContract = IMembership(s_membershipContractAddress);
 
     Vote[] private s_allVotes;
 
@@ -86,10 +86,7 @@ contract Voting is MembershipAuth, OnlyOwnerAuth {
 
         IProposalManagement.Proposal memory proposal =  proposalManagementContract.getProposalById(_proposalId);
 
-        // todos:
-        // check if voting time has elapsed and voting is also already completed - throw error
-        // permit voting if time has elapsed and voting is yet to be completed
-        if(proposal.proposalStatus == IProposalManagement.ProposalStatus.Created) {
+        if(proposal.proposalStatus != IProposalManagement.ProposalStatus.Active) {
             revert Voting__ProposalIsNotActive();
         }
 
@@ -130,146 +127,8 @@ contract Voting is MembershipAuth, OnlyOwnerAuth {
             nowTs
         );
 
-        // todo: update voting status to successful or failed - use the automated function inside proposal mangement
-    }
-
-    function updateVote(
-        VoteAction _newAction,
-        uint256 _voteId
-                
-    // onlyDAOMember(modifier) - MembershipAuth.sol
-    // onlyOwner(modifier) - OnlyOwnerAuth.sol
-    ) external onlyDAOMember(msg.sender) onlyOwner(msg.sender) {
-        _checkIds(_voteId);
-        Vote memory existingVote = voteIdToVote[_voteId];
-
-        if (existingVote.id != _voteId) {
-            revert Voting__NoExistingVote();
-        }
-
-        uint256 nowTs = block.timestamp;
-
-        Vote memory updatedVote = Vote({
-            id: existingVote.id,
-            addedAt: existingVote.addedAt,
-            proposalId: existingVote.proposalId,
-            // proposalCodeName: existingVote.proposalCodeName,
-            memberAddress: existingVote.memberAddress,
-            action: _newAction
-        });
-
-        voteIdToVote[_voteId] = updatedVote;
-
-        // update the all votes array
-        for (uint256 i = 0; i < s_allVotes.length; i++) {
-            if (existingVote.id == _voteId) {
-                s_allVotes[i] = updatedVote;
-
-                break;
-            }
-        }
-
-        Vote[] memory memberVotes = memberAddressToMemberVoteHistory[msg.sender]; 
-
-        // also update the member votes array
-        for (uint256 i = 0; i < memberVotes.length; i++) {
-            if (memberVotes[i].id == _voteId) {
-                memberVotes[i] = updatedVote;
-
-                break;
-            }
-        }
-
-        Vote[] memory proposalVoteHistory = proposalIdToProposalVoteHistory[existingVote.proposalId]; 
-
-        // also update the proposal votes history array
-        for (uint256 i = 0; i < proposalVoteHistory.length; i++) {
-            if (proposalVoteHistory[i].id == _voteId) {
-                proposalVoteHistory[i] = updatedVote;
-
-                break;
-            }
-        }
-
-        emit DAOVoteRecorded(
-            "vote updated successfully",
-            existingVote.id,
-            existingVote.proposalId,
-            // keccak256(bytes(existingVote.proposalCodeName)),
-            msg.sender,
-            _newAction,
-            nowTs
-        );
-    }
-
-    function removeVote(
-        uint256 _voteId
-                
-    // onlyDAOMember(modifier) - MembershipAuth.sol
-    // onlyOwner(modifier) - OnlyOwnerAuth.sol
-    ) external onlyDAOMember(msg.sender) onlyOwner(msg.sender) {
-        Vote memory existingVote = voteIdToVote[_voteId];
-
-        if (existingVote.id != _voteId) {
-            revert Voting__NoExistingVote();
-        }
-
-        IProposalManagement.Proposal memory proposalToUpdate =  proposalManagementContract.getProposalById(existingVote.proposalId);
-
-        // reference ProposalManagement.sol
-        if (existingVote.proposalId == proposalToUpdate.id) {
-            if (proposalToUpdate.proposalStatus == IProposalManagement.ProposalStatus.Queued) {
-                revert Voting__CannotDeleteQueuedVote();
-            }
-        }
-
-        delete existingVote;
-    
-        uint256 nowTs = block.timestamp;
-
-        // Remove from DAO votes list
-        for (uint256 i = 0; i < s_allVotes.length; i++) {
-            if (s_allVotes[i].id == _voteId) {
-                s_allVotes[i] = s_allVotes[s_allVotes.length - 1];
-                s_allVotes.pop();
-
-                break;
-            }
-        }
-
-        Vote[] memory memberVotes = memberAddressToMemberVoteHistory[msg.sender]; 
-
-        // Also remove from member's votes list
-        for (uint256 i = 0; i < memberVotes.length; i++) {
-            if (memberVotes[i].id == _voteId) {
-                memberVotes[i] = memberVotes[memberVotes.length - 1];
-                memberAddressToMemberVoteHistory[msg.sender].pop();
-
-                break;
-            }
-        }
-        
-        Vote[] memory proposalVoteHistory = proposalIdToProposalVoteHistory[existingVote.proposalId]; 
-
-        // Also remove from the proposals votes history array
-        for (uint256 i = 0; i < proposalVoteHistory.length; i++) {
-            if (proposalVoteHistory[i].id == _voteId) {
-                proposalVoteHistory[i] = proposalVoteHistory[proposalVoteHistory.length - 1];
-                proposalIdToProposalVoteHistory[proposalVoteHistory[i].id].pop();
-
-                break;
-            }
-        }
-
-        emit DAOVoteRecorded(
-            "vote removed succesfully",
-            _voteId,
-            existingVote.proposalId,
-            // keccak256(bytes(existingVote.proposalCodeName)),
-            existingVote.memberAddress,
-            existingVote.action,
-            nowTs
-        );
+        // this external function will update the proposal to success or failure once the vote is completed
+        proposalManagementContract.updateDAOProposalStatus__FailOrSuccess(_proposalId);
     }
 
     function getMemberVoteOnProposal(
@@ -294,11 +153,66 @@ contract Voting is MembershipAuth, OnlyOwnerAuth {
         return s_allVotes;
     }
 
-    function getDAOVoteHistoryOnProposal(
-        uint256 _proposalId
-    ) external view returns (Vote[] memory) {
+    // this to get all the votes including vote details - but more gas intensive
+    // function getDAOVoteHistoryOnProposal(
+    // uint256 _proposalId
+    //     ) external view returns (Vote[] memory _approvals, Vote[] memory _rejections) {
+    //         _checkIds(_proposalId);
+
+    //         Vote[] memory proposalVotes = proposalIdToProposalVoteHistory[_proposalId];
+
+    //         uint256 approvalsCount;
+    //         uint256 rejectionsCount;
+
+    //         // First loop: count
+    //         for (uint256 i = 0; i < proposalVotes.length; i++) {
+    //             if (proposalVotes[i].action == VoteAction.Approve) {
+    //                 approvalsCount++;
+    //             } else {
+    //                 rejectionsCount++;
+    //             }
+    //         }
+
+    //         // Allocate memory arrays with fixed size
+    //         _approvals = new Vote[](approvalsCount);
+    //         _rejections = new Vote[](rejectionsCount);
+
+    //         // Second loop: assign values
+    //         uint256 aIndex;
+    //         uint256 rIndex;
+
+    //         for (uint256 i = 0; i < proposalVotes.length; i++) {
+    //             if (proposalVotes[i].action == VoteAction.Approve) {
+    //                 _approvals[aIndex] = proposalVotes[i];
+    //                 aIndex++;
+    //             } else {
+    //                 _rejections[rIndex] = proposalVotes[i];
+    //                 rIndex++;
+    //             }
+    //         }
+
+    //         return (_approvals, _rejections);
+    // }
+
+
+    function getDAOVoteCountsOnProposal(
+    uint256 _proposalId
+    ) external view returns (uint256 approvals, uint256 rejections) {
         _checkIds(_proposalId);
 
-        return proposalIdToProposalVoteHistory[_proposalId];
+        Vote[] memory proposalVotes = proposalIdToProposalVoteHistory[_proposalId];
+
+        uint256 approvalsCount;
+        uint256 rejectionsCount;
+
+        for (uint256 i = 0; i < proposalVotes.length; i++) {
+            if (proposalVotes[i].action == VoteAction.Approve) {
+                approvals++;
+            } else {
+                rejections++;
+            }
+        }
+
+        return (approvalsCount, rejectionsCount);
     }
 }
