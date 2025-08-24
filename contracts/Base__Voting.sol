@@ -4,11 +4,12 @@ pragma solidity ^0.8.20;
 // import "./ProposalManagement.sol";
 import "./auth/MembershipAuth.sol";
 import "./auth/OnlyOwnerAuth.sol";
-import "./interfaces/Interface__LolaUSD.sol";
-import "./interfaces/Interface__ProposalManagement.sol";
-import "./interfaces/Interface__Membership.sol";
+import "./interfaces/ILolaUSD__Base.sol";
+import "./interfaces/IProposalManagement__Base.sol";
+import "./interfaces/IMembership__Base.sol";
+import "./interfaces/IAdminManagement__Base.sol";
 
-contract Voting is MembershipAuth, OnlyOwnerAuth {
+contract Base__Voting is MembershipAuth, OnlyOwnerAuth {
     // error Voting__NotDAOMember();
     // error Voting__ZeroAddressError();
     // error Voting__InvalidMemberId();
@@ -19,45 +20,54 @@ contract Voting is MembershipAuth, OnlyOwnerAuth {
     // error Voting__CannotDeleteQueuedVote();
     error Voting__InsufficientVotingBalance();
     error Voting__ProposalIsNotActive();
-    // error Voting__VotingIsCompleted(IProposalManagement.ProposalStatus _proposalStatus);
+    // error Voting__VotingIsCompleted(IProposalManagement__Base.ProposalStatus _proposalStatus);
 
-    enum VoteAction { Approve, Reject }
+    enum VoteAction {
+        Approve,
+        Reject
+    }
 
     /* NB: only the proposal id(which cannot changed or be updated) should be added(linked) to a vote. This will 
     prevent the need to handle the gas-intensive process of having to update all platform votes(in case of 
     a proposal update) - to reflect the update on the(their) parent proposal */
     struct Vote {
         uint256 id;
-        uint256 addedAt;           
+        uint256 addedAt;
         uint256 proposalId;
-        // string proposalCodeName;   
-        address memberAddress;           
+        // string proposalCodeName;
+        address memberAddress;
         VoteAction action;
     }
 
     event DAOVoteRecorded(
-        string message,       
-        uint256 voteId,         
+        string message,
+        uint256 voteId,
         uint256 indexed proposalId,
-        // bytes32 indexed proposalCodeHash, 
-        address indexed memberAddress, 
+        // bytes32 indexed proposalCodeHash,
+        address indexed memberAddress,
         VoteAction action,
         uint256 timestamp
     );
 
     uint256 internal s_minimumVotingBalanceRequirement = 10 * 10 ** 18; // 10 USDL
 
-    mapping(address => Vote[]) public memberAddressToMemberVoteHistory;    
-    mapping(address => mapping(uint256 => Vote)) public memberAddressToProposalIdToVote;
-    mapping(uint256 => Vote[]) public proposalIdToProposalVoteHistory;
-    mapping(uint256 => Vote) public voteIdToVote;
+    mapping(address => Vote[]) public s_memberAddressToMemberVoteHistory;
+    mapping(address => mapping(uint256 => Vote))
+        public s_memberAddressToProposalIdToVote;
+    mapping(uint256 => Vote[]) public s_proposalIdToProposalVoteHistory;
+    mapping(uint256 => Vote) public s_voteIdToVote;
 
     address internal s_lolaUSDCoreContractAddress;
     address internal s_proposalManagementCoreContractAddress;
+    address internal s_adminManagementCoreContractAddress;
     // address internal s_membershipContractAddress;
 
-    ILolaUSD internal lolaUSDContract = ILolaUSD(s_lolaUSDCoreContractAddress);
-    IProposalManagement internal proposalManagementContract = IProposalManagement(s_proposalManagementCoreContractAddress);
+    ILolaUSD__Base internal s_lolaUSDContract__Base =
+        ILolaUSD__Base(s_lolaUSDCoreContractAddress);
+    IProposalManagement__Base internal s_proposalManagementContract__Base =
+        IProposalManagement__Base(s_proposalManagementCoreContractAddress);
+    IAdminManagement__Base internal s_adminMangementContract__Base =
+        IAdminManagement__Base(s_adminManagementCoreContractAddress);
     // IMembership internal membershipContract = IMembership(s_membershipContractAddress);
 
     Vote[] private s_allVotes;
@@ -66,40 +76,58 @@ contract Voting is MembershipAuth, OnlyOwnerAuth {
         if (_proposalId == 0) revert Voting__InvalidIdError();
     }
 
-    function _checkProposalCodeName(string memory _proposalCodeName) internal pure {
-        if (bytes(_proposalCodeName).length == 0) revert Voting__EmptyProposalCodeName();
+    function _checkProposalCodeName(
+        string memory _proposalCodeName
+    ) internal pure {
+        if (bytes(_proposalCodeName).length == 0)
+            revert Voting__EmptyProposalCodeName();
     }
 
     function castVote(
         uint256 _proposalId,
         // string calldata _proposalCodeName,
         VoteAction _action
-
-    // onlyDAOMember(modifier) - from => ProposalManagement.sol -> MembershipAuth.sol
-    ) external onlyDAOMember(msg.sender) {
+    )
+        external
+        // onlyDAOMember(modifier) - from => ProposalManagement.sol -> MembershipAuth.sol
+        onlyDAOMember(msg.sender)
+    {
         _checkIds(_proposalId);
         // _checkProposalCodeName(_proposalCodeName);
 
-        if(lolaUSDContract.balanceOf(msg.sender) < s_minimumVotingBalanceRequirement) {
+        if (
+            s_lolaUSDContract__Base.balanceOf(msg.sender) <
+            s_minimumVotingBalanceRequirement
+        ) {
             revert Voting__InsufficientVotingBalance();
         }
 
-        IProposalManagement.Proposal memory proposal =  proposalManagementContract.getProposalById(_proposalId);
+        IProposalManagement__Base.Proposal
+            memory proposal = s_proposalManagementContract__Base.getProposalById(
+                _proposalId
+            );
 
-        if(proposal.proposalStatus != IProposalManagement.ProposalStatus.Active) {
+        if (
+            proposal.proposalStatus !=
+            IProposalManagement__Base.ProposalStatus.Active
+        ) {
             revert Voting__ProposalIsNotActive();
         }
 
         // prevent duplicate voting
-        Vote[] memory proposalVotes = proposalIdToProposalVoteHistory[_proposalId];
+        Vote[] memory proposalVotes = s_proposalIdToProposalVoteHistory[
+            _proposalId
+        ];
 
-        for(uint256 i=0; i < proposalVotes.length; i++) {
-            if(proposalVotes[i].memberAddress == msg.sender) {
+        for (uint256 i = 0; i < proposalVotes.length; i++) {
+            if (proposalVotes[i].memberAddress == msg.sender) {
                 revert Voting__NoMutipleVoting();
-            } 
-        } 
+            }
+        }
 
-        uint256 voteId = s_allVotes.length > 0 ? s_allVotes[s_allVotes.length - 1].id + 1 : 1;
+        uint256 voteId = s_allVotes.length > 0
+            ? s_allVotes[s_allVotes.length - 1].id + 1
+            : 1;
         uint256 nowTs = block.timestamp;
 
         Vote memory newVote = Vote({
@@ -111,10 +139,10 @@ contract Voting is MembershipAuth, OnlyOwnerAuth {
             action: _action
         });
 
-        memberAddressToMemberVoteHistory[msg.sender].push(newVote);
-        proposalIdToProposalVoteHistory[_proposalId].push(newVote);
-        memberAddressToProposalIdToVote[msg.sender][_proposalId] = newVote;
-        voteIdToVote[voteId] = newVote; 
+        s_memberAddressToMemberVoteHistory[msg.sender].push(newVote);
+        s_proposalIdToProposalVoteHistory[_proposalId].push(newVote);
+        s_memberAddressToProposalIdToVote[msg.sender][_proposalId] = newVote;
+        s_voteIdToVote[voteId] = newVote;
         s_allVotes.push(newVote);
 
         emit DAOVoteRecorded(
@@ -128,7 +156,9 @@ contract Voting is MembershipAuth, OnlyOwnerAuth {
         );
 
         // this external function will update the proposal to success or failure once the vote is completed
-        proposalManagementContract.updateDAOProposalStatus__FailOrSuccess(_proposalId);
+        s_proposalManagementContract__Base.updateDAOProposalStatus__FailOrSuccess(
+            _proposalId
+        );
     }
 
     function getMemberVoteOnProposal(
@@ -137,8 +167,8 @@ contract Voting is MembershipAuth, OnlyOwnerAuth {
     ) external view returns (Vote memory) {
         // _verifyIsAddress(function) -       _verifyIsAddress(_memberAddress);
         _checkIds(_proposalId);
-        
-        return (memberAddressToProposalIdToVote[_memberAddress][_proposalId]);
+
+        return (s_memberAddressToProposalIdToVote[_memberAddress][_proposalId]);
     }
 
     function getMemberVoteHistory(
@@ -146,7 +176,7 @@ contract Voting is MembershipAuth, OnlyOwnerAuth {
     ) external view returns (Vote[] memory) {
         // _verifyIsAddress(function) -       _verifyIsAddress(_memberAddress);
 
-        return memberAddressToMemberVoteHistory[_memberAddress];
+        return s_memberAddressToMemberVoteHistory[_memberAddress];
     }
 
     function getDAOVoteHistory() external view returns (Vote[] memory) {
@@ -159,7 +189,7 @@ contract Voting is MembershipAuth, OnlyOwnerAuth {
     //     ) external view returns (Vote[] memory _approvals, Vote[] memory _rejections) {
     //         _checkIds(_proposalId);
 
-    //         Vote[] memory proposalVotes = proposalIdToProposalVoteHistory[_proposalId];
+    //         Vote[] memory proposalVotes = s_proposalIdToProposalVoteHistory[_proposalId];
 
     //         uint256 approvalsCount;
     //         uint256 rejectionsCount;
@@ -194,13 +224,14 @@ contract Voting is MembershipAuth, OnlyOwnerAuth {
     //         return (_approvals, _rejections);
     // }
 
-
     function getDAOVoteCountsOnProposal(
-    uint256 _proposalId
+        uint256 _proposalId
     ) external view returns (uint256 approvals, uint256 rejections) {
         _checkIds(_proposalId);
 
-        Vote[] memory proposalVotes = proposalIdToProposalVoteHistory[_proposalId];
+        Vote[] memory proposalVotes = s_proposalIdToProposalVoteHistory[
+            _proposalId
+        ];
 
         uint256 approvalsCount;
         uint256 rejectionsCount;
