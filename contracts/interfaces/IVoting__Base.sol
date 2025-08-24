@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-interface IVoting {
+interface IVoting__Base {
     // ---------------- Errors ----------------
     error Voting__NotDAOMember();
     error Voting__ZeroAddressError();

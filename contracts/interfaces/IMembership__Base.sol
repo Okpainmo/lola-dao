@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 /// @title IMembership
 /// @notice Interface for the Membership contract
 
-interface IMembership {
+interface IMembership__Base {
     // ------------------------
     // Errors
     // ------------------------

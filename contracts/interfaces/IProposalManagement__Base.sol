@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 // import "./interfaces/Interface__AdminManagement.sol";
 
-interface IProposalManagement {
+interface IProposalManagement__Base {
     // ------------------------
     // Errors
     // ------------------------
@@ -20,8 +20,19 @@ interface IProposalManagement {
     // ------------------------
     // Enums
     // ------------------------
-    enum ProposalAction { Mint, Burn, Other }
-    enum ProposalStatus { Created, Active, Successful, Failed, Queued, Executed }
+    enum ProposalAction {
+        Mint,
+        Burn,
+        Other
+    }
+    enum ProposalStatus {
+        Created,
+        Active,
+        Successful,
+        Failed,
+        Queued,
+        Executed
+    }
 
     // ------------------------
     // Structs
@@ -77,7 +88,13 @@ interface IProposalManagement {
 
     function getAllDAOProposals() external view returns (Proposal[] memory);
 
-    function getProposalById(uint256 _proposalId) external view returns (Proposal memory);
+    function getProposalById(
+        uint256 _proposalId
+    ) external view returns (Proposal memory);
 
-    function getMemberProposals(address _memberAddress) external view returns (Proposal[] memory);
+    function getMemberProposals(
+        address _memberAddress
+    ) external view returns (Proposal[] memory);
+
+    function executeProposal(uint256 _proposalId) external;
 }

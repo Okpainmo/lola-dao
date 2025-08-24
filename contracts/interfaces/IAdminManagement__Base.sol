@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-interface IAdminManagement {
+interface IAdminManagement__Base {
     // ------------------------
     // Errors
     // ------------------------
@@ -41,13 +41,18 @@ interface IAdminManagement {
     // Functions
     // ------------------------
     function addAdmin(address _address) external;
+
     function removeAdmin(address _address) external;
 
     function getPlatformAdmins() external view returns (Admin[] memory);
 
-    function getAdminAdminRegistrations(address _adminAddress) external view returns (Admin[] memory);
+    function getAdminAdminRegistrations(
+        address _adminAddress
+    ) external view returns (Admin[] memory);
 
     function checkIsAdmin(address _adminAddress) external view returns (bool);
 
-    function getAdminProfile(address _adminAddress) external view returns (Admin memory);
+    function getAdminProfile(
+        address _adminAddress
+    ) external view returns (Admin memory);
 }
