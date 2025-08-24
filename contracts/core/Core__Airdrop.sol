@@ -1,51 +1,44 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
-import "../Base__ProposalManagement.sol";
+import "../Base__Airdrop.sol";
 import "../interfaces/IAdminManagement__Core.sol";
 
-contract Core__Proposals is Base__ProposalManagement {
-    error ProposalsCore__ZeroAddressError();
-    error ProposalsCore__AccessDenied_AdminOnly();
-    error ProposalsCore__NonMatchingAdminAddress();
+contract Core__Airdrop is Base__Airdrop {
+    error AirdropCore__ZeroAddressError();
+    error AirdropCore__AccessDenied_AdminOnly();
+    error AirdropCore__NonMatchingAdminAddress();
 
     event Logs(string message, uint256 timestamp, string indexed contractName);
 
-    function _verifyIsAddress(address _address) internal override pure {
+    string private constant CONTRACT_NAME = "Core__Airdrop"; // set in one place to avoid mispelling elsewhere
+    address private immutable i_owner;
+
+    function _verifyIsAddress(address _address) private pure {
         if (_address == address(0)) {
-            revert ProposalsCore__ZeroAddressError();
+            revert AirdropCore__ZeroAddressError();
         }
     }
-
-    function _verifyIsAdmin(address _address) public view override  {
-         if (!s_adminManagementContract__Base.checkIsAdmin(_address)) {
-            revert ProposalsCore__AccessDenied_AdminOnly();
-        }
-    }
-
-    string private constant CONTRACT_NAME = "Core__Proposals"; // set in one place to avoid mispelling elsewhere
 
     constructor(
-        address _adminManagementCoreContractAddress 
-        // address _votingCoreContractAddress, 
-        // address _membershipCoreContractAddress
-    ) {
+        address _adminManagementCoreContractAddress
+        // address _lolaUSDCoreContractAddress
+    )
+    {
         _verifyIsAddress(_adminManagementCoreContractAddress);
-        // _verifyIsAddress(_votingCoreContractAddress);
-        // _verifyIsAddress(_membershipCoreContractAddress);
+        // _verifyIsAddress(_lolaUSDCoreContractAddress);
 
-        // i_owner(variable) - from ProposalManagement.sol -> OnlyOwnerAuth.sol
+        s_adminManagementCoreContractAddress = _adminManagementCoreContractAddress;
+        // s_lolaUSDCoreContractAddress = _lolaUSDCoreContractAddress;
+
         i_owner = msg.sender;
-        s_adminManagementCoreContractAddress = _adminManagementCoreContractAddress; // needed to check admin rights and likely more
-        // s_votingCoreContractAddress = _votingCoreContractAddress;
-        // s_membershipCoreContractAddress = _membershipCoreContractAddress;
 
-         emit Logs(
+        emit Logs(
             "contract deployed successfully with constructor chores completed",
             block.timestamp,
             CONTRACT_NAME
         );
     }
-    
+
     function getContractName() public pure returns (string memory) {
         return CONTRACT_NAME;
     }
@@ -54,13 +47,26 @@ contract Core__Proposals is Base__ProposalManagement {
         return i_owner;
     }
 
+    function updateLolaUSDCoreContractAddress(address _newAddress) public {
+        _verifyIsAddress(_newAddress);
+
+        if (!s_adminManagementCoreContract__Base.checkIsAdmin(msg.sender)) {
+            revert AirdropCore__AccessDenied_AdminOnly();
+        }
+
+        s_lolaUSDCoreContractAddress = _newAddress;
+    }
 
     function updateAdminManagementCoreContractAddress(
         address _newAddress
     ) public {
-        _verifyIsAdmin(msg.sender);
+        if (!s_adminManagementCoreContract__Base.checkIsAdmin(msg.sender)) {
+            revert AirdropCore__AccessDenied_AdminOnly();
+        }
         
-        _verifyIsAddress(_newAddress);
+        if (_newAddress == address(0)) {
+            revert AirdropCore__ZeroAddressError();
+        }
 
         /* 
         updating the admin management core contract address is a very sensitive process. The old/current contract 
@@ -77,31 +83,17 @@ contract Core__Proposals is Base__ProposalManagement {
 
         // the fact that it pings without an error is enough - but still do as below to be super-sure
         if(contractAddress != _newAddress) { 
-            revert ProposalsCore__NonMatchingAdminAddress();
+            revert AirdropCore__NonMatchingAdminAddress();
         }
 
         /* also ensure current sender is an admin on that contract - which further verifies that the contract 
         is indeed and 'adminManagement' contract */
-        _verifyIsAdmin(msg.sender);
+        if (!s_adminManagementContractToVerify.checkIsAdmin(msg.sender)) {
+            revert AirdropCore__AccessDenied_AdminOnly();
+        }
 
         s_adminManagementCoreContractAddress = _newAddress;
-        s_adminManagementContract__Base = IAdminManagement__Base(s_adminManagementCoreContractAddress);
-    }
-
-    function updateVotingCoreContractAddress(address _newAddress) public {
-        _verifyIsAddress(_newAddress);
-
-        _verifyIsAdmin(msg.sender);
-
-        s_votingCoreContractAddress = _newAddress;
-    }
-
-    function updateMembershipCoreContractAddress(address _newAddress) public {
-        _verifyIsAddress(_newAddress);
-
-        _verifyIsAdmin(msg.sender);
-
-        s_membershipCoreContractAddress = _newAddress;
+        s_adminManagementCoreContract__Base = IAdminManagement__Base(s_adminManagementCoreContractAddress);
     }
 
     function ping() external view returns (string memory, address, uint256) {

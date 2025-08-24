@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
-import "../Voting.sol";
+import "../Base__Voting.sol";
 
-contract Core__Voting is Voting {
+contract Core__Voting is Base__Voting {
     error VotingCore__ZeroAddressError();
+    error VotingCore__AccessDenied_AdminOnly();
 
     event Logs(string message, uint256 timestamp, string indexed contractName);
 
@@ -40,12 +41,20 @@ contract Core__Voting is Voting {
             revert VotingCore__ZeroAddressError();
         }
 
+        if (!s_adminMangementContract__Base.checkIsAdmin(msg.sender)) {
+            revert VotingCore__AccessDenied_AdminOnly();
+        }
+
         s_lolaUSDCoreContractAddress = _newAddress;
     }
 
     function updateProposalManagementCoreContractAddress(address _newAddress) public {
         if(_newAddress == address(0)) {
             revert VotingCore__ZeroAddressError();
+        }
+
+        if (!s_adminMangementContract__Base.checkIsAdmin(msg.sender)) {
+            revert VotingCore__AccessDenied_AdminOnly();
         }
 
         s_proposalManagementCoreContractAddress = _newAddress;

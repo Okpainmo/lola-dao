@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
-import "../AdminManagement.sol";
+import "../Base__AdminManagement.sol";
 
-contract Core__AdminManagement is AdminManagement {
+contract Core__AdminManagement is Base__AdminManagement {
     event Logs(string message, uint256 timestamp, string indexed contractName);
 
     address private i_owner;
