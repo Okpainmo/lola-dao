@@ -17,7 +17,7 @@ contract Core__LolaUSD is Base__LolaUSD {
     address private i_owner;
     string private s_tokenImageCID;
     string private s_tokenMetadataCID;
-    address internal s_airdropCoreContractAddress; // only needed for transferFrom approval - no contract initialization
+    // address internal s_airdropCoreContractAddress; // only needed for transferFrom approval - no contract initialization
 
     // IBase__Airdrop internal airdropContract__Base = IBase__Airdrop(s_airdropCoreContractAddress);
     uint256 internal s_airdropLimit;
@@ -30,8 +30,8 @@ contract Core__LolaUSD is Base__LolaUSD {
         string memory _tokenSymbol,
         uint8 _decimals,
         uint256 _supply,
-        address _adminManagementCoreContractAddress
-        // address _proposalManagementCoreContractAddress,
+        address _adminManagementCoreContractAddress,
+        address _proposalManagementCoreContractAddress
     ) {
         s_tokenName = _tokenName;
         s_tokenSymbol = _tokenSymbol;
@@ -43,10 +43,10 @@ contract Core__LolaUSD is Base__LolaUSD {
         s_tokenImageCID = _tokenLogoCID;
 
         s_adminManagementCoreContractAddress = _adminManagementCoreContractAddress; // needed to check admin rights and likely more
-        // s_proposalManagementCoreContractAddress = _proposalManagementCoreContractAddress;
+        s_proposalManagementCoreContractAddress = _proposalManagementCoreContractAddress;
 
-        s_adminManagementContract_Base = IAdminManagement__Base(s_adminManagementCoreContractAddress);
-        // s_proposalManagementContract_Base = IProposalManagement__Base(s_proposalManagementCoreContractAddress);
+        s_adminManagementContract__Base = IAdminManagement__Base(s_adminManagementCoreContractAddress);
+        s_proposalManagementContract__Base = IProposalManagement__Base(s_proposalManagementCoreContractAddress);
 
         balance[msg.sender] = s_supply; 
         emit Transfer(address(0), msg.sender, s_supply);
@@ -82,18 +82,18 @@ contract Core__LolaUSD is Base__LolaUSD {
         return s_proposalManagementCoreContractAddress;
     }
 
-    function getAirdropCoreContractAddress()
-        public
-        view
-        returns (address)
-    {
-        return s_airdropCoreContractAddress;
-    }
+    // function getAirdropCoreContractAddress()
+    //     public
+    //     view
+    //     returns (address)
+    // {
+    //     return s_airdropCoreContractAddress;
+    // }
 
     function updateAdminManagementCoreContractAddress(
         address _newAddress
     ) public {
-        if (!s_adminManagementContract_Base.checkIsAdmin(msg.sender)) {
+        if (!s_adminManagementContract__Base.checkIsAdmin(msg.sender)) {
             revert LolaUSDCore__AccessDenied_AdminOnly();
         }
         
@@ -111,8 +111,8 @@ contract Core__LolaUSD is Base__LolaUSD {
         Hence the need to first connect and ping to make sure the new contract works before setting
         */
         // first connect and ping
-        IAdminManagement__Core s_adminManagementContract_BaseToVerify = IAdminManagement__Core(_newAddress);
-        ( , address contractAddress, ) = s_adminManagementContract_BaseToVerify.ping();
+        IAdminManagement__Core s_adminManagementContract__BaseToVerify = IAdminManagement__Core(_newAddress);
+        ( , address contractAddress, ) = s_adminManagementContract__BaseToVerify.ping();
 
         // the fact that it pings without an error is enough - but still do as below to be super-sure
         if(contractAddress != _newAddress) { 
@@ -121,19 +121,19 @@ contract Core__LolaUSD is Base__LolaUSD {
 
         /* also ensure current sender is an admin on that contract - which further verifies that the contract 
         is indeed and 'adminManagement' contract */
-        if (!s_adminManagementContract_BaseToVerify.checkIsAdmin(msg.sender)) {
+        if (!s_adminManagementContract__BaseToVerify.checkIsAdmin(msg.sender)) {
             revert LolaUSDCore__AccessDenied_AdminOnly();
         }
 
         s_adminManagementCoreContractAddress = _newAddress;
-        s_adminManagementContract_Base = IAdminManagement__Base(s_adminManagementCoreContractAddress);
+        s_adminManagementContract__Base = IAdminManagement__Base(s_adminManagementCoreContractAddress);
     }
     
     // // not needed
     // function updateAirdropCoreContractAddress( 
     //     address _newAddress
     // ) public {
-    //     if (!s_adminManagementContract_Base.checkIsAdmin(msg.sender)) {
+    //     if (!s_adminManagementContract__Base.checkIsAdmin(msg.sender)) {
     //         revert LolaUSDCore__AccessDenied_AdminOnly();
     //     }
 
@@ -147,7 +147,7 @@ contract Core__LolaUSD is Base__LolaUSD {
     function updateProposalManagementCoreContractAddress(
         address _newAddress
     ) public {
-        if (!s_adminManagementContract_Base.checkIsAdmin(msg.sender)) {
+        if (!s_adminManagementContract__Base.checkIsAdmin(msg.sender)) {
             revert LolaUSDCore__AccessDenied_AdminOnly();
         }
 
@@ -156,7 +156,7 @@ contract Core__LolaUSD is Base__LolaUSD {
         }
 
         s_proposalManagementCoreContractAddress = _newAddress;
-        s_proposalManagementContract_Base = IProposalManagement__Base(s_proposalManagementCoreContractAddress);
+        s_proposalManagementContract__Base = IProposalManagement__Base(s_proposalManagementCoreContractAddress);
     }
 
     function getTokenLogo() public view returns (string memory) {
@@ -168,7 +168,7 @@ contract Core__LolaUSD is Base__LolaUSD {
     }
 
     function updateTokenLogo(string memory _newLogoCID) public {
-        if (!s_adminManagementContract_Base.checkIsAdmin(msg.sender)) {
+        if (!s_adminManagementContract__Base.checkIsAdmin(msg.sender)) {
             revert LolaUSDCore__AccessDenied_AdminOnly();
         }
 
@@ -179,7 +179,7 @@ contract Core__LolaUSD is Base__LolaUSD {
     }
 
     function updateTokenMetaData(string memory _newMetaDataCID) public {
-        if (!s_adminManagementContract_Base.checkIsAdmin(msg.sender)) {
+        if (!s_adminManagementContract__Base.checkIsAdmin(msg.sender)) {
             revert LolaUSDCore__AccessDenied_AdminOnly();
         }
 

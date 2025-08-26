@@ -31,9 +31,9 @@ contract Base__LolaUSD {
     address internal s_adminManagementCoreContractAddress; // needed to check admin rights and likely more
     address internal s_proposalManagementCoreContractAddress; // needed for interaction with the external proposals management core contract
 
-    IAdminManagement__Base internal s_adminManagementContract_Base =
+    IAdminManagement__Base internal s_adminManagementContract__Base =
         IAdminManagement__Base(s_adminManagementCoreContractAddress);
-    IProposalManagement__Base internal s_proposalManagementContract_Base =
+    IProposalManagement__Base internal s_proposalManagementContract__Base =
         IProposalManagement__Base(s_proposalManagementCoreContractAddress);
 
     string internal s_tokenName;
@@ -200,12 +200,12 @@ contract Base__LolaUSD {
     ) public {
         _amount = _amount * 10 ** s_tokenDecimals;
 
-        if (!s_adminManagementContract_Base.checkIsAdmin(msg.sender)) {
+        if (!s_adminManagementContract__Base.checkIsAdmin(msg.sender)) {
             revert LolaUSD__AccessDenied_AdminOnly();
         }
 
         IProposalManagement__Base.Proposal
-            memory proposal = s_proposalManagementContract_Base.getProposalById(
+            memory proposal = s_proposalManagementContract__Base.getProposalById(
                 _proposalId
             );
 
@@ -234,7 +234,7 @@ contract Base__LolaUSD {
         emit Transfer(address(0), _to, _amount);
 
         // updates the status of the proposal in the external proposal-management core contract to "executed"
-        s_proposalManagementContract_Base.executeProposal(_proposalId);
+        s_proposalManagementContract__Base.executeProposal(_proposalId);
     }
 
     function burn(
@@ -245,12 +245,12 @@ contract Base__LolaUSD {
     ) public {
         _amount = _amount * 10 ** s_tokenDecimals;
 
-        if (!s_adminManagementContract_Base.checkIsAdmin(msg.sender)) {
+        if (!s_adminManagementContract__Base.checkIsAdmin(msg.sender)) {
             revert LolaUSD__AccessDenied_AdminOnly();
         }
 
         IProposalManagement__Base.Proposal
-            memory proposal = s_proposalManagementContract_Base.getProposalById(
+            memory proposal = s_proposalManagementContract__Base.getProposalById(
                 _proposalId
             );
 
@@ -300,7 +300,7 @@ contract Base__LolaUSD {
         }
 
         // updates the status of the proposal in the external proposal-management core contract to "executed"
-        s_proposalManagementContract_Base.executeProposal(_proposalId);
+        s_proposalManagementContract__Base.executeProposal(_proposalId);
     }
 }
 
