@@ -14,7 +14,7 @@ contract Core__Membership is Base__Membership {
 
     string private constant CONTRACT_NAME = "Core__Membership"; // set in one place to avoid mispelling elsewhere
 
-    function makeMember() private {
+    function makeAdminMember() private {
         // Admin(struct) - from AdminManagement.sol
          _verifyIsAddress(msg.sender);
 
@@ -34,17 +34,28 @@ contract Core__Membership is Base__Membership {
         emit DAOMembersManagement("DAO member added successfully", msg.sender, block.timestamp);
     }
 
-    constructor(address _adminManagementCoreContractAddress, address _lolaUSDCoreContractAddress) {
-        if(_adminManagementCoreContractAddress == address(0) || _lolaUSDCoreContractAddress == address(0)) {
+    constructor(
+        address _adminManagementCoreContractAddress,
+        address _lolaUSDCoreContractAddress
+    ) {
+        if(
+            _adminManagementCoreContractAddress == address(0) 
+            || _lolaUSDCoreContractAddress == address(0)
+        ) {
             revert MembershipCore__ZeroAddressError();
         }
 
         i_owner = msg.sender;
-        makeMember();
+        makeAdminMember();
 
         s_adminManagementCoreContractAddress = _adminManagementCoreContractAddress; // needed to check admin rights and likely more
         s_lolaUSDCoreContractAddress = _lolaUSDCoreContractAddress; // needed for checking users' balance to ensure requirements are met for voting, and likely more
 
+        s_adminManagementContract__Base = IAdminManagement__Base(s_adminManagementCoreContractAddress);
+        s_lolaUSDContract__Base = ILolaUSD__Base(_lolaUSDCoreContractAddress);
+
+        s_minimumMembershipBalanceRequirement = 10 * 10 ** s_lolaUSDContract__Base.decimals();
+        
         emit Logs(
             "contract deployed successfully with constructor chores completed",
             block.timestamp,
@@ -63,7 +74,7 @@ contract Core__Membership is Base__Membership {
     function updateAdminManagementCoreContractAddress(
         address _newAddress
     ) public {
-        if (!s_adminManagementCoreContract__Base.checkIsAdmin(msg.sender)) {
+        if (!s_adminManagementContract__Base.checkIsAdmin(msg.sender)) {
             revert MembershipCore__AccessDenied_AdminOnly();
         }
         
@@ -80,6 +91,7 @@ contract Core__Membership is Base__Membership {
     
         Hence the need to first connect and ping to make sure the new contract works before setting
         */
+        
         // first connect and ping
         IAdminManagement__Core s_adminManagementContractToVerify = IAdminManagement__Core(_newAddress);
         ( , address contractAddress, ) = s_adminManagementContractToVerify.ping();
@@ -96,7 +108,7 @@ contract Core__Membership is Base__Membership {
         }
 
         s_adminManagementCoreContractAddress = _newAddress;
-        s_adminManagementCoreContract__Base = IAdminManagement__Base(s_adminManagementCoreContractAddress);
+        s_adminManagementContract__Base = IAdminManagement__Base(s_adminManagementCoreContractAddress);
     }
 
     function updateLolaUSDCoreContractAddress(address _newAddress) public {
@@ -104,14 +116,35 @@ contract Core__Membership is Base__Membership {
             revert MembershipCore__ZeroAddressError();
         }
 
-        if (!s_adminManagementCoreContract__Base.checkIsAdmin(msg.sender)) {
+        if (!s_adminManagementContract__Base.checkIsAdmin(msg.sender)) {
             revert MembershipCore__AccessDenied_AdminOnly();
         }
 
         s_lolaUSDCoreContractAddress = _newAddress;
+        
+        s_lolaUSDContract__Base = ILolaUSD__Base(_newAddress);
+    }
+
+    function getAdminManagementCoreContractAddress()
+        public
+        view
+        returns (address)
+    {
+        return s_adminManagementCoreContractAddress;
+    }
+
+    function getLolaUSDCoreContractAddress()
+        public
+        view
+        returns (address)
+    {
+        return s_lolaUSDCoreContractAddress;
     }
 
     function updateMinimumMembershipBalanceRequirement(uint256 _value) public {
+        if (!s_adminManagementContract__Base.checkIsAdmin(msg.sender)) {
+            revert MembershipCore__AccessDenied_AdminOnly();
+        }
         // s_minimumMembershipBalanceRequirement - from Membership.sol
         s_minimumMembershipBalanceRequirement = _value * 10 ** 18;
     }

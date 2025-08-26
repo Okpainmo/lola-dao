@@ -17,7 +17,7 @@ contract Core__Airdrop is Base__Airdrop {
         if (_address == address(0)) {
             revert AirdropCore__ZeroAddressError();
         }
-    }
+    } 
 
     constructor(
         address _adminManagementCoreContractAddress
@@ -29,6 +29,10 @@ contract Core__Airdrop is Base__Airdrop {
 
         s_adminManagementCoreContractAddress = _adminManagementCoreContractAddress;
         // s_lolaUSDCoreContractAddress = _lolaUSDCoreContractAddress;
+
+        s_adminManagementContract__Base = IAdminManagement__Base(s_adminManagementCoreContractAddress);
+        // s_lolaUSDContract__Base = ILolaUSD__Base(_lolaUSDCoreContractAddress);
+        // s_lolaUSDContract__Core = ILolaUSD__Core(_lolaUSDCoreContractAddress);
 
         i_owner = msg.sender;
 
@@ -50,17 +54,20 @@ contract Core__Airdrop is Base__Airdrop {
     function updateLolaUSDCoreContractAddress(address _newAddress) public {
         _verifyIsAddress(_newAddress);
 
-        if (!s_adminManagementCoreContract__Base.checkIsAdmin(msg.sender)) {
+        if (!s_adminManagementContract__Base.checkIsAdmin(msg.sender)) {
             revert AirdropCore__AccessDenied_AdminOnly();
         }
 
         s_lolaUSDCoreContractAddress = _newAddress;
+
+        s_lolaUSDContract__Base = ILolaUSD__Base(_newAddress);
+        s_lolaUSDContract__Core = ILolaUSD__Core(_newAddress);
     }
 
     function updateAdminManagementCoreContractAddress(
         address _newAddress
     ) public {
-        if (!s_adminManagementCoreContract__Base.checkIsAdmin(msg.sender)) {
+        if (!s_adminManagementContract__Base.checkIsAdmin(msg.sender)) {
             revert AirdropCore__AccessDenied_AdminOnly();
         }
         
@@ -93,7 +100,23 @@ contract Core__Airdrop is Base__Airdrop {
         }
 
         s_adminManagementCoreContractAddress = _newAddress;
-        s_adminManagementCoreContract__Base = IAdminManagement__Base(s_adminManagementCoreContractAddress);
+        s_adminManagementContract__Base = IAdminManagement__Base(s_adminManagementCoreContractAddress);
+    }
+
+    function getAdminManagementCoreContractAddress()
+        public
+        view
+        returns (address)
+    {
+        return s_adminManagementCoreContractAddress;
+    }
+
+    function getLolaUSDCoreContractAddress()
+        public
+        view
+        returns (address)
+    {
+        return s_lolaUSDCoreContractAddress;
     }
 
     function ping() external view returns (string memory, address, uint256) {

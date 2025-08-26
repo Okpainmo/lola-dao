@@ -16,7 +16,7 @@ contract Core__Proposals is Base__ProposalManagement {
         }
     }
 
-    function _verifyIsAdmin(address _address) public view override  {
+    function _verifyIsAdmin(address _address) internal view override  {
          if (!s_adminManagementContract__Base.checkIsAdmin(_address)) {
             revert ProposalsCore__AccessDenied_AdminOnly();
         }
@@ -25,7 +25,7 @@ contract Core__Proposals is Base__ProposalManagement {
     string private constant CONTRACT_NAME = "Core__Proposals"; // set in one place to avoid mispelling elsewhere
 
     constructor(
-        address _adminManagementCoreContractAddress 
+        address _adminManagementCoreContractAddress
         // address _votingCoreContractAddress, 
         // address _membershipCoreContractAddress
     ) {
@@ -38,6 +38,11 @@ contract Core__Proposals is Base__ProposalManagement {
         s_adminManagementCoreContractAddress = _adminManagementCoreContractAddress; // needed to check admin rights and likely more
         // s_votingCoreContractAddress = _votingCoreContractAddress;
         // s_membershipCoreContractAddress = _membershipCoreContractAddress;
+
+        s_adminManagementContract__Base = IAdminManagement__Base(s_adminManagementCoreContractAddress);
+        // s_votingContract__base = IVoting__Base(s_votingCoreContractAddress);
+        // s_membershipContract__Base = IMembership__Base(s_membershipCoreContractAddress);
+
 
          emit Logs(
             "contract deployed successfully with constructor chores completed",
@@ -57,10 +62,10 @@ contract Core__Proposals is Base__ProposalManagement {
 
     function updateAdminManagementCoreContractAddress(
         address _newAddress
-    ) public {
-        _verifyIsAdmin(msg.sender);
-        
+    ) public {        
         _verifyIsAddress(_newAddress);
+
+        _verifyIsAdmin(msg.sender);
 
         /* 
         updating the admin management core contract address is a very sensitive process. The old/current contract 
@@ -71,6 +76,7 @@ contract Core__Proposals is Base__ProposalManagement {
     
         Hence the need to first connect and ping to make sure the new contract works before setting
         */
+
         // first connect and ping
         IAdminManagement__Core s_adminManagementContractToVerify = IAdminManagement__Core(_newAddress);
         ( , address contractAddress, ) = s_adminManagementContractToVerify.ping();
@@ -94,6 +100,7 @@ contract Core__Proposals is Base__ProposalManagement {
         _verifyIsAdmin(msg.sender);
 
         s_votingCoreContractAddress = _newAddress;
+        s_votingContract__base = IVoting__Base(_newAddress);
     }
 
     function updateMembershipCoreContractAddress(address _newAddress) public {
@@ -102,7 +109,33 @@ contract Core__Proposals is Base__ProposalManagement {
         _verifyIsAdmin(msg.sender);
 
         s_membershipCoreContractAddress = _newAddress;
+        s_membershipContract__Base = IMembership__Base(_newAddress);
     }
+
+        function getAdminManagementCoreContractAddress()
+        public
+        view
+        returns (address)
+    {
+        return s_adminManagementCoreContractAddress;
+    }
+
+    function getVotingCoreContractAddress()
+        public
+        view
+        returns (address)
+    {
+        return s_votingCoreContractAddress;
+    }
+
+    function getMembershipCoreContractAddress()
+        public
+        view
+        returns (address)
+    {
+        return s_membershipCoreContractAddress;
+    }
+
 
     function ping() external view returns (string memory, address, uint256) {
         return (CONTRACT_NAME, address(this), block.timestamp);
