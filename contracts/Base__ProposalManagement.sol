@@ -13,7 +13,7 @@ contract Base__ProposalManagement is MembershipAuth, OnlyOwnerAuth {
     error ProposalManagement__ProposalCodeNameCannotBeEmpty();
     error ProposalManagement__ProposalNotFound();
     error ProposalManagement__ProposalAlreadyExist(string proposalCodeName);
-    // error ProposalManagement__NotDAOMember();
+    error ProposalManagement__NotDAOMember();
     error ProposalManagement__ZeroAddressError();
     error ProposalManagement__AdminAndProposalAuthorOnly();
     error ProposalManagement__InvalidIdError();
@@ -87,8 +87,8 @@ contract Base__ProposalManagement is MembershipAuth, OnlyOwnerAuth {
         }
     }
 
-    function _verifyIsAdmin(address _address) public view virtual {
-         if (!s_adminManagementContract__Base.checkIsAdmin(_address)) {
+    function _verifyIsAdmin(address _address) internal view virtual {
+        if (!s_adminManagementContract__Base.checkIsAdmin(_address)) {
             revert ProposalManagement__AccessDenied_AdminOnly();
         }
     }
@@ -109,11 +109,13 @@ contract Base__ProposalManagement is MembershipAuth, OnlyOwnerAuth {
         ProposalAction _proposalAction,
         uint256 _tokenSupplyChange,
         string memory _proposalMetaDataCID
-    )
-        external
-        // ProposalStatus _proposalStatus
-        onlyDAOMember(msg.sender)
-    {
+    ) external {
+        bool isMember = s_membershipContract__Base.checkIsDAOMember(msg.sender);
+
+        if(!isMember) {
+            revert ProposalManagement__NotDAOMember();
+        }
+
         if (bytes(_proposalCodeName).length == 0) {
             revert ProposalManagement__ProposalCodeNameCannotBeEmpty();
         }
@@ -505,7 +507,6 @@ contract Base__ProposalManagement is MembershipAuth, OnlyOwnerAuth {
         // to be called from the externally deployed "Core__Voting" contract
         _checkIds(_proposalId);
         _verifyIsAdmin(msg.sender);
-
 
         Proposal storage existingProposal = s_proposalIdToProposal[_proposalId];
 

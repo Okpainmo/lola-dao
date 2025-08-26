@@ -6,11 +6,13 @@ import "./interfaces/ILolaUSD__Core.sol";
 
 contract Base__Airdrop {
     error Airdrop__AirdropCampaignEnded();
-    // error Airdrop__AirdropFailed();
+    error Airdrop__AirdropFailed();
     error Airdrop__AirdropLimitCannotBeZero();
     error Airdrop__WalletAlreadyReceivedAirdrop();
     error Airdrop__AccessDenied_AdminOnly();
     error Airdrop__SpendApprovalFailedForAirdropContract();
+    error AirdropCore__NoActiveAirdropCampaign();
+    error AirdropCore__ExcessSpendRequestOrUnauthorized();
     // error Airdrop__ZeroAddressError();
 
     event AirdropCampaignUpdated(
@@ -45,7 +47,7 @@ contract Base__Airdrop {
 
     event AirdropDelivered(Airdrop airdrop);
 
-    bool private s_isAirdropCampaignActive = false; // airdop is disabled by default
+    bool private s_isAirdropCampaignActive = false; // airdrop is disabled by default
     uint256 private s_airdropAmount; // 10 USDL
     uint256 private s_airdropLimit;
     mapping(address => bool) private s_hasReceivedAirdrop;
@@ -55,7 +57,7 @@ contract Base__Airdrop {
 
     string private constant CONTRACT_NAME = "Base__Airdrop"; // set in one place to avoid mispelling elsewhere
 
-    IAdminManagement__Base internal s_adminManagementCoreContract__Base =
+    IAdminManagement__Base internal s_adminManagementContract__Base =
         IAdminManagement__Base(s_adminManagementCoreContractAddress);
 
     // separate interfaces naming for clarity(during development), but same address since the core funtion inherits/contains and exposes everything
@@ -72,6 +74,10 @@ contract Base__Airdrop {
     Airdrop[] private s_airdrops;
 
     function airdrop() public {
+        if(!s_isAirdropCampaignActive) {
+            revert AirdropCore__NoActiveAirdropCampaign();
+        }
+
         if (s_hasReceivedAirdrop[msg.sender]) {
             revert Airdrop__WalletAlreadyReceivedAirdrop();
         }
@@ -87,47 +93,43 @@ contract Base__Airdrop {
         );
 
         if (s_airdropAmount > (airdropContractAllowance * 10 ** 18)) { // allowance as well as other number outputs are sent out in exact units not in eth arithmentic form
-            revert Airdrop__AirdropCampaignEnded();
+            revert AirdropCore__ExcessSpendRequestOrUnauthorized();
         }
 
         // re-entrancy guard – mark/set this early
         s_hasReceivedAirdrop[msg.sender] = true;
 
-        // address tokenOwnerAddress = s_lolaUSDContract__Core.getContractOwner();
+        bool success = s_lolaUSDContract__Base.transferFrom(
+            s_lolaUSDContract__Core.getContractOwner(),
+            msg.sender,
+            s_airdropAmount / (10 ** s_lolaUSDContract__Base.decimals()) // send exact figure not multiples
+        );
 
-        // if (tokenOwnerAddress == address(0)) {
-        //     revert Airdrop__ZeroAddressError();
-        // }
+        if (!success) revert Airdrop__AirdropFailed(); 
 
-        // bool success = s_lolaUSDContract__Base.transferFrom(tokenOwnerAddress, msg.sender, s_airdropAmount);
+        // // ✅ Manual low-level call wrapper for ERC20 transferFrom
+        // (bool success, bytes memory returnData) = address(s_lolaUSDContract__Base)
+        // .call(
+        //     abi.encodeWithSelector(
+        //         s_lolaUSDContract__Base.transferFrom.selector,
+        //         s_lolaUSDContract__Core.getContractOwner(),
+        //         msg.sender,
+        //         s_airdropAmount
+        //     )
+        // );
 
-        //  if (!success) {
+        // if (!success) {
         //     revert("TransferFrom call failed");
         // }
 
-        // ✅ Manual low-level call wrapper for ERC20 transferFrom
-        (bool success, bytes memory returnData) = address(s_lolaUSDContract__Base)
-        .call(
-            abi.encodeWithSelector(
-                s_lolaUSDContract__Base.transferFrom.selector,
-                s_lolaUSDContract__Core.getContractOwner(),
-                msg.sender,
-                s_airdropAmount
-            )
-        );
-
-        if (!success) {
-            revert("TransferFrom call failed");
-        }
-
-        // Some ERC20s don’t return anything, some return bool
-        if (returnData.length > 0) {
-            // check returned value is true
-            require(
-                abi.decode(returnData, (bool)),
-                "process failed"
-            );
-        }
+        // // Some ERC20s don’t return anything, some return bool
+        // if (returnData.length > 0) {
+        //     // check returned value is true
+        //     require(
+        //         abi.decode(returnData, (bool)),
+        //         "process failed"
+        //     );
+        // }
 
         // Record the airdrop
         Airdrop memory newAirdrop = Airdrop({
@@ -152,6 +154,14 @@ contract Base__Airdrop {
         return s_airdropLimit;
     }
 
+    function getAirdropAmount() public view returns (uint256) {
+        return s_airdropAmount / (10 ** s_lolaUSDContract__Base.decimals());
+    }
+
+    function getCurrentAirdropCampaignData() public view returns (uint256 airdropLimit, uint256 airdropAmount, bool isActive) {
+        return (s_airdropLimit, s_airdropAmount / (10 ** s_lolaUSDContract__Base.decimals()), s_isAirdropCampaignActive);
+    }
+
     function updateAirdropCampaign(
         uint256 _newAirdropLimit,
         uint256 _newAirdropAmount
@@ -160,7 +170,7 @@ contract Base__Airdrop {
             _newAirdropAmount *
             10 ** s_lolaUSDContract__Base.decimals();
 
-        if (!s_adminManagementCoreContract__Base.checkIsAdmin(msg.sender)) {
+        if (!s_adminManagementContract__Base.checkIsAdmin(msg.sender)) {
             revert Airdrop__AccessDenied_AdminOnly();
         }
 
@@ -212,7 +222,7 @@ contract Base__Airdrop {
     }
 
     function enableAirdrops () public {
-        if (!s_adminManagementCoreContract__Base.checkIsAdmin(msg.sender)) {
+        if (!s_adminManagementContract__Base.checkIsAdmin(msg.sender)) {
             revert Airdrop__AccessDenied_AdminOnly();
         }
 
@@ -229,7 +239,7 @@ contract Base__Airdrop {
     }
 
      function disableAirdrops () public {
-        if (!s_adminManagementCoreContract__Base.checkIsAdmin(msg.sender)) {
+        if (!s_adminManagementContract__Base.checkIsAdmin(msg.sender)) {
             revert Airdrop__AccessDenied_AdminOnly();
         }
 
@@ -243,5 +253,9 @@ contract Base__Airdrop {
             CONTRACT_NAME,
             msg.sender
         );
+    }
+
+    function isAirdropCampaignActive() public view returns(bool) {
+        return s_isAirdropCampaignActive;
     }
 }

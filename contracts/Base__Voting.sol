@@ -66,7 +66,7 @@ contract Base__Voting is MembershipAuth, OnlyOwnerAuth {
         ILolaUSD__Base(s_lolaUSDCoreContractAddress);
     IProposalManagement__Base internal s_proposalManagementContract__Base =
         IProposalManagement__Base(s_proposalManagementCoreContractAddress);
-    IAdminManagement__Base internal s_adminMangementContract__Base =
+    IAdminManagement__Base internal s_adminManagementContract__Base =
         IAdminManagement__Base(s_adminManagementCoreContractAddress);
     // IMembership internal membershipContract = IMembership(s_membershipContractAddress);
 
