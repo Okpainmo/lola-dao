@@ -14,26 +14,28 @@ contract Core__Voting is Base__Voting {
     string private constant CONTRACT_NAME = "Core__Voting"; // set in one place to avoid mispelling elsewhere
 
     constructor(
-        // address _lolaUSDCoreContractAddress, 
+        address _adminManagementCoreContractAddress,
+        address _lolaUSDCoreContractAddress
         // address _proposalManagementCoreContractAddress, 
-        address _adminManagementCoreContractAddress
     ) {
         if(
             _adminManagementCoreContractAddress == address(0)
             // || _proposalManagementCoreContractAddress == address(0) 
-            // || _lolaUSDCoreContractAddress == address(0) 
+            || _lolaUSDCoreContractAddress == address(0) 
             ) {
             revert VotingCore__ZeroAddressError();
         }
 
         i_owner = msg.sender;
         s_adminManagementCoreContractAddress = _adminManagementCoreContractAddress;
-        // s_lolaUSDCoreContractAddress = _lolaUSDCoreContractAddress; // needed for checking users' balance to ensure requirements are met for voting, and likely more
+        s_lolaUSDCoreContractAddress = _lolaUSDCoreContractAddress; // needed for checking users' balance to ensure requirements are met for voting, and likely more
         // s_proposalManagementCoreContractAddress = _proposalManagementCoreContractAddress; // needed for interactions with the external core proposal management contract
 
         s_adminManagementContract__Base = IAdminManagement__Base(s_adminManagementCoreContractAddress);
-        // s_lolaUSDContract__Base = ILolaUSD__Base(_lolaUSDCoreContractAddress);
+        s_lolaUSDContract__Base = ILolaUSD__Base(s_lolaUSDCoreContractAddress);
         // s_proposalManagementContract__Base = IProposalManagement__Base(_proposalManagementCoreContractAddress);
+
+        s_minimumVotingBalanceRequirement = 10 * 10 ** s_lolaUSDContract__Base.decimals();
 
         emit Logs(
             "contract deployed successfully with constructor chores completed",
@@ -63,7 +65,20 @@ contract Core__Voting is Base__Voting {
         s_lolaUSDContract__Base = ILolaUSD__Base(_newAddress);
     }
 
-    function updateProposalManagementCoreContractAddress(address _newAddress) public {
+    function updateMembershipCoreContractAddress(address _newAddress) public {
+        if(_newAddress == address(0)) {
+            revert VotingCore__ZeroAddressError();
+        }
+
+        if (!s_adminManagementContract__Base.checkIsAdmin(msg.sender)) {
+            revert VotingCore__AccessDenied_AdminOnly();
+        }
+
+        s_membershipContractAddress = _newAddress;
+        s_membershipContract__Base = IMembership__Base(s_membershipContractAddress);
+    }
+
+     function updateProposalManagementCoreContractAddress(address _newAddress) public {
         if(_newAddress == address(0)) {
             revert VotingCore__ZeroAddressError();
         }
@@ -76,7 +91,7 @@ contract Core__Voting is Base__Voting {
         s_proposalManagementContract__Base = IProposalManagement__Base(_newAddress);
     }
 
-        function updateAdminManagementCoreContractAddress(
+    function updateAdminManagementCoreContractAddress(
         address _newAddress
     ) public {
         if (!s_adminManagementContract__Base.checkIsAdmin(msg.sender)) {
@@ -138,6 +153,15 @@ contract Core__Voting is Base__Voting {
     {
         return s_proposalManagementCoreContractAddress;
     }
+
+    function getMembershipCoreContractAddress()
+        public
+        view
+        returns (address)
+    {
+        return s_membershipContractAddress;
+    }
+
 
     function updateMinimumVotingBalanceRequirement(uint256 _value) public {
         if (!s_adminManagementContract__Base.checkIsAdmin(msg.sender)) {

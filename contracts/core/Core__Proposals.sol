@@ -26,23 +26,14 @@ contract Core__Proposals is Base__ProposalManagement {
 
     constructor(
         address _adminManagementCoreContractAddress
-        // address _votingCoreContractAddress, 
-        // address _membershipCoreContractAddress
     ) {
         _verifyIsAddress(_adminManagementCoreContractAddress);
-        // _verifyIsAddress(_votingCoreContractAddress);
-        // _verifyIsAddress(_membershipCoreContractAddress);
 
-        // i_owner(variable) - from ProposalManagement.sol -> OnlyOwnerAuth.sol
+        // i_owner(variable) - from ProposalManagement.sol
         i_owner = msg.sender;
         s_adminManagementCoreContractAddress = _adminManagementCoreContractAddress; // needed to check admin rights and likely more
-        // s_votingCoreContractAddress = _votingCoreContractAddress;
-        // s_membershipCoreContractAddress = _membershipCoreContractAddress;
 
         s_adminManagementContract__Base = IAdminManagement__Base(s_adminManagementCoreContractAddress);
-        // s_votingContract__base = IVoting__Base(s_votingCoreContractAddress);
-        // s_membershipContract__Base = IMembership__Base(s_membershipCoreContractAddress);
-
 
          emit Logs(
             "contract deployed successfully with constructor chores completed",
@@ -50,39 +41,30 @@ contract Core__Proposals is Base__ProposalManagement {
             CONTRACT_NAME
         );
     }
-    
-    function getContractName() public pure returns (string memory) {
-        return CONTRACT_NAME;
-    }
 
-    function getContractOwner() public view returns (address) {
-        return i_owner;
-    }
-
-
-    function updateAdminManagementCoreContractAddress(
-        address _newAddress
-    ) public {        
-        _verifyIsAddress(_newAddress);
+    function updateRelatedCoreContractAddresses(address _new__AdminManagement, address _new__Membership, address _new__Voting, address _new__LolaUSDCoreContractAddress) public {
+        _verifyIsAddress(_new__AdminManagement);
+        _verifyIsAddress(_new__Membership);
+        _verifyIsAddress(_new__Voting);
+        _verifyIsAddress(_new__LolaUSDCoreContractAddress);
 
         _verifyIsAdmin(msg.sender);
 
-        /* 
-        updating the admin management core contract address is a very sensitive process. The old/current contract 
-        to switch from can be active and working, but if the 'isAdmin' check is passed(on the old/current contract), 
-        and a new address is set which is wrong, it becomes impossible to now connect to the intending admin 
-        contract. Hence the next step of admin check below, will keep failing and impossible to pass due to contract 
-        immutability. Other chores requiring admin check will also be impossible.
-    
-        Hence the need to first connect and ping to make sure the new contract works before setting
-        */
+        s_votingCoreContractAddress = _new__Voting;
+        s_votingContract__base = IVoting__Base(_new__Voting);
+
+        s_membershipCoreContractAddress = _new__Membership;
+        s_membershipContract__Base = IMembership__Base(_new__Membership);
+
+        s_lolaUSDCoreContractAddress = _new__LolaUSDCoreContractAddress;
+        s_lolaUSDContract__Core =  ILolaUSD__Core(s_lolaUSDCoreContractAddress);
 
         // first connect and ping
-        IAdminManagement__Core s_adminManagementContractToVerify = IAdminManagement__Core(_newAddress);
+        IAdminManagement__Core s_adminManagementContractToVerify = IAdminManagement__Core(_new__AdminManagement);
         ( , address contractAddress, ) = s_adminManagementContractToVerify.ping();
 
         // the fact that it pings without an error is enough - but still do as below to be super-sure
-        if(contractAddress != _newAddress) { 
+        if(contractAddress != _new__AdminManagement) { 
             revert ProposalsCore__NonMatchingAdminAddress();
         }
 
@@ -90,54 +72,19 @@ contract Core__Proposals is Base__ProposalManagement {
         is indeed and 'adminManagement' contract */
         _verifyIsAdmin(msg.sender);
 
-        s_adminManagementCoreContractAddress = _newAddress;
+        s_adminManagementCoreContractAddress = _new__AdminManagement;
         s_adminManagementContract__Base = IAdminManagement__Base(s_adminManagementCoreContractAddress);
     }
 
-    function updateVotingCoreContractAddress(address _newAddress) public {
-        _verifyIsAddress(_newAddress);
-
-        _verifyIsAdmin(msg.sender);
-
-        s_votingCoreContractAddress = _newAddress;
-        s_votingContract__base = IVoting__Base(_newAddress);
-    }
-
-    function updateMembershipCoreContractAddress(address _newAddress) public {
-        _verifyIsAddress(_newAddress);
-
-        _verifyIsAdmin(msg.sender);
-
-        s_membershipCoreContractAddress = _newAddress;
-        s_membershipContract__Base = IMembership__Base(_newAddress);
-    }
-
-        function getAdminManagementCoreContractAddress()
+    function getRelatedCoreContractAddresses()
         public
         view
-        returns (address)
+        returns (address adminManagement, address Voting, address Membership, address lolaUSDToken)
     {
-        return s_adminManagementCoreContractAddress;
+        return (s_adminManagementCoreContractAddress, s_votingCoreContractAddress, s_membershipCoreContractAddress, s_lolaUSDCoreContractAddress);
     }
 
-    function getVotingCoreContractAddress()
-        public
-        view
-        returns (address)
-    {
-        return s_votingCoreContractAddress;
-    }
-
-    function getMembershipCoreContractAddress()
-        public
-        view
-        returns (address)
-    {
-        return s_membershipCoreContractAddress;
-    }
-
-
-    function ping() external view returns (string memory, address, uint256) {
-        return (CONTRACT_NAME, address(this), block.timestamp);
+    function ping() external view returns (string memory contractName, address contractAddress, address contractOwner) {
+        return (CONTRACT_NAME, address(this), i_owner);
     }
 }
