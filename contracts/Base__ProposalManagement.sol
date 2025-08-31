@@ -1,37 +1,36 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "./auth/MembershipAuth.sol";
-// import "./auth/AdminAuth.sol";
-import "./auth/OnlyOwnerAuth.sol";
-// import "./interfaces/Interface__LolaUSD.sol";
 import "./interfaces/IAdminManagement__Base.sol";
 import "./interfaces/IVoting__Base.sol";
 import "./interfaces/IMembership__Base.sol";
+import "./interfaces/ILolaUSD__Core.sol";
 
-contract Base__ProposalManagement is MembershipAuth, OnlyOwnerAuth {
+contract Base__ProposalManagement {
     error ProposalManagement__ProposalCodeNameCannotBeEmpty();
     error ProposalManagement__ProposalNotFound();
-    error ProposalManagement__ProposalAlreadyExist(string proposalCodeName);
+    error ProposalManagement__ProposalAlreadyExist(Proposal proposal);
     error ProposalManagement__NotDAOMember();
+    error ProposalManagement__ProposalAuthorOnly();
     error ProposalManagement__ZeroAddressError();
     error ProposalManagement__AdminAndProposalAuthorOnly();
     error ProposalManagement__InvalidIdError();
     error ProposalManagement__EmptyProposalCodeName();
     error ProposalManagement__AccessDenied_AdminOnly();
-    // error ProposalManagement__ProcessCannotBeManual();
-    // error ProposalManagement__VotingInProgress();
-    // error ProposalManagement__VotingEndedProposalFailed();
     error ProposalManagement__ProposalIsAlreadyActive();
-    // error ProposalManagement__InactiveProposal();
-    error ProposalManagement__ProposalCannotBeQueued();
+    error ProposalManagement__ProposalIsNotYetSuccessful();
     error ProposalManagement__ProposalIsNotQueued();
+    error ProposalManagement__ProposalStillInProgress();
+    error ProposalManagement__ProposalTypeIsMintOrBurn();
+    error ProposalManagement__CannotUpdateActiveProposal();
+    error ProposalManagement__NewCountIsInvalid();
 
     enum ProposalAction {
         Mint,
         Burn,
         Other
     }
+
     enum ProposalStatus {
         Created, // proposal is created
         Active, // admin views proposal, ensures it passes all standards, then activate it for voting to commence
@@ -43,7 +42,6 @@ contract Base__ProposalManagement is MembershipAuth, OnlyOwnerAuth {
 
     event DAOProposalManagement(
         uint256 id,
-        // string message,
         string indexed proposalCodeName,
         ProposalAction indexed proposalAction,
         uint256 tokenSupplyChange,
@@ -61,7 +59,23 @@ contract Base__ProposalManagement is MembershipAuth, OnlyOwnerAuth {
         ProposalAction proposalAction;
         uint256 tokenSupplyChange;
         string proposalMetaDataCID;
+        bool exists;
     }
+
+    address internal immutable i_owner;
+
+    /* 
+    The ledger Id tracker, is a counter that helps to prevent re-use of ids on previously created entries(proposals). 
+    This simply means that an id can only be used once - like in regular off-chain databases. By addding this, even when a 
+    proposal is removed for any reason, the tracker can simply continue the count without depending on a check of the length
+    of the proposals array, since using that length will permit re-using Ids - which can result in conflicts, e.g. if the previous 
+    proposal with the same id as a newly created one already has some DAO votes 
+    
+    This problem will still re-surface is for any reason a new proposal contract is deployed(as the tracker will reset to 0). 
+    The solution to this, will be to migrate over the proposal state on the previous contract, then use the 
+    "updateLedgerIdTracker" function to reset the counter.
+    */
+    uint256 s_ledgerIdTracker = 0;
 
     Proposal[] internal s_DAOProposalsHistory;
     mapping(string => Proposal) internal s_proposalCodeNameToProposal;
@@ -71,15 +85,16 @@ contract Base__ProposalManagement is MembershipAuth, OnlyOwnerAuth {
     address internal s_adminManagementCoreContractAddress;
     address internal s_votingCoreContractAddress;
     address internal s_membershipCoreContractAddress;
-    // address internal s_lolaUSDCoreContractAddress;
+    address internal s_lolaUSDCoreContractAddress;
 
-    // ILolaUSD internal lolaUSDContract = ILolaUSD(s_lolaUSDCoreContractAddress);
     IAdminManagement__Base internal s_adminManagementContract__Base =
         IAdminManagement__Base(s_adminManagementCoreContractAddress);
     IVoting__Base internal s_votingContract__base =
         IVoting__Base(s_votingCoreContractAddress);
     IMembership__Base internal s_membershipContract__Base =
         IMembership__Base(s_membershipCoreContractAddress);
+        ILolaUSD__Core internal s_lolaUSDContract__Core =
+    ILolaUSD__Core(s_lolaUSDCoreContractAddress);
 
     function _verifyIsAddress(address _address) internal pure virtual {
         if (_address == address(0)) {
@@ -95,13 +110,6 @@ contract Base__ProposalManagement is MembershipAuth, OnlyOwnerAuth {
 
     function _checkIds(uint256 _proposalId) internal pure virtual {
         if (_proposalId == 0) revert ProposalManagement__InvalidIdError();
-    }
-
-    function _checkProposalCodeName(
-        string memory _proposalCodeName
-    ) internal pure virtual {
-        if (bytes(_proposalCodeName).length == 0)
-            revert ProposalManagement__EmptyProposalCodeName();
     }
 
     function createDAOProposal(
@@ -126,12 +134,11 @@ contract Base__ProposalManagement is MembershipAuth, OnlyOwnerAuth {
                 s_proposalCodeNameToProposal[_proposalCodeName].proposalCodeName
             ).length != 0
         ) {
-            revert ProposalManagement__ProposalAlreadyExist(_proposalCodeName);
+            revert ProposalManagement__ProposalAlreadyExist(s_proposalCodeNameToProposal[_proposalCodeName]);
         }
 
-        uint256 proposalId = s_DAOProposalsHistory.length > 0
-            ? s_DAOProposalsHistory[s_DAOProposalsHistory.length - 1].id + 1
-            : 1;
+        s_ledgerIdTracker = s_ledgerIdTracker + 1;
+        uint256 proposalId = s_ledgerIdTracker;
 
         Proposal memory newProposal = Proposal({
             id: proposalId,
@@ -141,7 +148,8 @@ contract Base__ProposalManagement is MembershipAuth, OnlyOwnerAuth {
             proposalAction: _proposalAction,
             tokenSupplyChange: _tokenSupplyChange,
             proposalMetaDataCID: _proposalMetaDataCID,
-            proposalStatus: ProposalStatus.Created
+            proposalStatus: ProposalStatus.Created,
+            exists: true
         });
 
         s_DAOProposalsHistory.push(newProposal);
@@ -163,7 +171,7 @@ contract Base__ProposalManagement is MembershipAuth, OnlyOwnerAuth {
 
     function removeDAOProposal(
         string memory _proposalCodeName
-    ) external onlyDAOMember(msg.sender) {
+    ) external {
         if (bytes(_proposalCodeName).length == 0) {
             revert ProposalManagement__ProposalCodeNameCannotBeEmpty();
         }
@@ -176,18 +184,21 @@ contract Base__ProposalManagement is MembershipAuth, OnlyOwnerAuth {
             revert ProposalManagement__ProposalNotFound();
         }
 
-        // Proposal the mapping entry - only an Proposal you added
         Proposal storage existingProposal = s_proposalCodeNameToProposal[
             _proposalCodeName
         ];
 
-        // s_isAdmin(variable) - from => Voting.sol -> AdminAuth.sol
         if (
-            existingProposal.addedBy != msg.sender &&
-            !s_adminManagementContract__Base.checkIsAdmin(msg.sender)
+            existingProposal.addedBy != msg.sender
         ) {
-            revert ProposalManagement__AdminAndProposalAuthorOnly();
+            revert ProposalManagement__ProposalAuthorOnly();
         }
+
+        // ✅ Copy into memory so we don't lose the values after delete
+        Proposal memory proposalCopy = existingProposal;
+            
+        delete s_proposalCodeNameToProposal[proposalCopy.proposalCodeName];
+        delete s_proposalIdToProposal[proposalCopy.id];
 
         // Remove from s_DAOProposalsHistory array
         for (uint256 i = 0; i < s_DAOProposalsHistory.length; i++) {
@@ -223,57 +234,54 @@ contract Base__ProposalManagement is MembershipAuth, OnlyOwnerAuth {
             }
         }
 
+        // ✅ Use the memory copy for the event
         emit DAOProposalManagement(
-            existingProposal.id,
-            // "DAO Proposal removed successfully",
-            existingProposal.proposalCodeName,
-            existingProposal.proposalAction,
-            existingProposal.tokenSupplyChange,
+            proposalCopy.id,
+            proposalCopy.proposalCodeName,
+            proposalCopy.proposalAction,
+            proposalCopy.tokenSupplyChange,
             msg.sender,
             block.timestamp,
-            existingProposal.proposalStatus
+            proposalCopy.proposalStatus
         );
-
-        delete s_proposalCodeNameToProposal[_proposalCodeName];
-        delete s_proposalIdToProposal[existingProposal.id];
     }
 
     function updateDAOProposal(
-        string memory _proposalCodeName,
-        ProposalAction _proposalAction,
-        uint256 _tokenSupplyChange,
-        string memory _proposalMetaDataCID,
+        string memory _newProposalCodeName,
+        ProposalAction _newProposalAction,
+        uint256 _newTokenSupplyChange,
+        string memory _newProposalMetaDataCID,
         uint256 _proposalId
     )
         external
-        // ProposalStatus _proposalStatus // only admin should be able to update proposal status - see dedicated function below
-
-        // onlyDAOMember(modifier) - from => Voting.sol -> MembershipAuth.sol
-        // onlyOwner(modifier) - from => Voting.sol -> OnlyOwnerAuth.sol
-        onlyDAOMember(msg.sender)
-        onlyOwner(msg.sender)
     {
-        if (bytes(_proposalCodeName).length == 0) {
+        if (bytes(_newProposalCodeName).length == 0) {
             revert ProposalManagement__ProposalCodeNameCannotBeEmpty();
         }
 
         if (
-            bytes(
-                s_proposalCodeNameToProposal[_proposalCodeName].proposalCodeName
-            ).length == 0
+            s_proposalIdToProposal[_proposalId].exists != true
         ) {
             revert ProposalManagement__ProposalNotFound();
         }
 
-        Proposal storage existingProposal = s_proposalCodeNameToProposal[
-            _proposalCodeName
-        ];
+        Proposal storage existingProposal = s_proposalIdToProposal[_proposalId];
 
-        existingProposal.proposalAction = _proposalAction;
-        existingProposal.tokenSupplyChange = _tokenSupplyChange;
+        if (existingProposal.addedBy != msg.sender) {
+            revert ProposalManagement__ProposalAuthorOnly();
+        }
+
+        if (
+            s_proposalIdToProposal[_proposalId].proposalStatus == ProposalStatus.Active
+        ) {
+            revert ProposalManagement__CannotUpdateActiveProposal();
+        }
+
+        existingProposal.proposalCodeName = _newProposalCodeName;
+        existingProposal.proposalAction = _newProposalAction;
+        existingProposal.tokenSupplyChange = _newTokenSupplyChange;
         existingProposal.addedAt = block.timestamp;
-        existingProposal.proposalMetaDataCID = _proposalMetaDataCID;
-        // existingProposal.proposalStatus = _proposalStatus;
+        existingProposal.proposalMetaDataCID = _newProposalMetaDataCID;
 
         // also update the s_DAOProposalsHistory array
         for (uint256 i = 0; i < s_DAOProposalsHistory.length; i++) {
@@ -297,7 +305,7 @@ contract Base__ProposalManagement is MembershipAuth, OnlyOwnerAuth {
             }
         }
 
-        s_proposalCodeNameToProposal[_proposalCodeName] = existingProposal;
+        s_proposalCodeNameToProposal[_newProposalCodeName] = existingProposal;
         s_proposalIdToProposal[existingProposal.id] = existingProposal;
 
         /* NB: only the proposal id(which cannot changed or be updated) should be added(linked) to a vote. This will 
@@ -316,6 +324,44 @@ contract Base__ProposalManagement is MembershipAuth, OnlyOwnerAuth {
         );
     }
 
+    function _handleProposalStatusUpdateFinish(uint256 _proposalId, Proposal memory _existingProposal) private {
+        for (uint256 i = 0; i < s_DAOProposalsHistory.length; i++) {
+            if (s_DAOProposalsHistory[i].id == _proposalId) {
+                s_DAOProposalsHistory[i] = _existingProposal;
+
+                break;
+            }
+        }
+
+        for (uint256 i = 0; i < s_memberToMemberProposals[
+            _existingProposal.addedBy
+        ].length; i++) {
+            if (s_memberToMemberProposals[
+            _existingProposal.addedBy
+        ][i].id == _proposalId) {
+                s_memberToMemberProposals[
+            _existingProposal.addedBy][i] = _existingProposal;
+
+                break;
+            }
+        }
+
+        s_proposalCodeNameToProposal[
+            _existingProposal.proposalCodeName] = _existingProposal;
+        s_proposalIdToProposal[_existingProposal.id] = _existingProposal;
+
+        emit DAOProposalManagement(
+            _existingProposal.id,
+            // "DAO Proposal updated successfully",
+            _existingProposal.proposalCodeName,
+            _existingProposal.proposalAction,
+            _existingProposal.tokenSupplyChange,
+            msg.sender,
+            block.timestamp,
+            _existingProposal.proposalStatus
+        );
+    }
+
     /* 
         The 3 proposal status update tasks below, were split(instead of using one function), due to the different permutations
         /combinations that were possible. and conflicts that could arise. Besides, that makes things easier to read and understand
@@ -326,51 +372,19 @@ contract Base__ProposalManagement is MembershipAuth, OnlyOwnerAuth {
         _verifyIsAdmin(msg.sender);
 
         Proposal storage existingProposal = s_proposalIdToProposal[_proposalId];
+        
+        if(!existingProposal.exists) {
+            revert ProposalManagement__ProposalNotFound();
+        }
 
         // you only queue a successful proposal
         if (existingProposal.proposalStatus != ProposalStatus.Successful) {
-            revert ProposalManagement__ProposalCannotBeQueued();
+            revert ProposalManagement__ProposalIsNotYetSuccessful();
         }
 
         existingProposal.proposalStatus = ProposalStatus.Queued;
 
-        // also update the s_DAOProposalsHistory array
-        for (uint256 i = 0; i < s_DAOProposalsHistory.length; i++) {
-            if (s_DAOProposalsHistory[i].id == _proposalId) {
-                s_DAOProposalsHistory[i] = existingProposal;
-
-                break;
-            }
-        }
-
-        // Remove from member proposals history array
-        Proposal[] storage memberProposals = s_memberToMemberProposals[
-            existingProposal.addedBy
-        ];
-
-        for (uint256 i = 0; i < memberProposals.length; i++) {
-            if (memberProposals[i].id == _proposalId) {
-                memberProposals[i] = existingProposal;
-
-                break;
-            }
-        }
-
-        s_proposalCodeNameToProposal[
-            existingProposal.proposalCodeName
-        ] = existingProposal;
-        s_proposalIdToProposal[existingProposal.id] = existingProposal;
-
-        emit DAOProposalManagement(
-            existingProposal.id,
-            // "DAO Proposal updated successfully",
-            existingProposal.proposalCodeName,
-            existingProposal.proposalAction,
-            existingProposal.tokenSupplyChange,
-            msg.sender,
-            block.timestamp,
-            existingProposal.proposalStatus
-        );
+        _handleProposalStatusUpdateFinish(_proposalId, existingProposal);
     }
 
     function activateProposal(uint256 _proposalId) public {
@@ -380,49 +394,17 @@ contract Base__ProposalManagement is MembershipAuth, OnlyOwnerAuth {
 
         Proposal storage existingProposal = s_proposalIdToProposal[_proposalId];
 
+        if(!existingProposal.exists) {
+            revert ProposalManagement__ProposalNotFound();
+        }
+
         if (existingProposal.proposalStatus != ProposalStatus.Created) {
             revert ProposalManagement__ProposalIsAlreadyActive();
         }
 
-        existingProposal.proposalStatus = ProposalStatus.Queued;
+        existingProposal.proposalStatus = ProposalStatus.Active;
 
-        // also update the s_DAOProposalsHistory array
-        for (uint256 i = 0; i < s_DAOProposalsHistory.length; i++) {
-            if (s_DAOProposalsHistory[i].id == _proposalId) {
-                s_DAOProposalsHistory[i] = existingProposal;
-
-                break;
-            }
-        }
-
-        // Remove from member proposals history array
-        Proposal[] storage memberProposals = s_memberToMemberProposals[
-            existingProposal.addedBy
-        ];
-
-        for (uint256 i = 0; i < memberProposals.length; i++) {
-            if (memberProposals[i].id == _proposalId) {
-                memberProposals[i] = existingProposal;
-
-                break;
-            }
-        }
-
-        s_proposalCodeNameToProposal[
-            existingProposal.proposalCodeName
-        ] = existingProposal;
-        s_proposalIdToProposal[existingProposal.id] = existingProposal;
-
-        emit DAOProposalManagement(
-            existingProposal.id,
-            // "DAO Proposal updated successfully",
-            existingProposal.proposalCodeName,
-            existingProposal.proposalAction,
-            existingProposal.tokenSupplyChange,
-            msg.sender,
-            block.timestamp,
-            existingProposal.proposalStatus
-        );
+        _handleProposalStatusUpdateFinish(_proposalId, existingProposal);
     }
 
     function executeProposal(uint256 _proposalId) external {
@@ -433,55 +415,31 @@ contract Base__ProposalManagement is MembershipAuth, OnlyOwnerAuth {
 
         Proposal storage existingProposal = s_proposalIdToProposal[_proposalId];
 
+        if(!existingProposal.exists) {
+            revert ProposalManagement__ProposalNotFound();
+        }
+
+        ( ,address tokenContractAddress, ) = s_lolaUSDContract__Core.ping();
+
+        /* check to prevent manually executing proposals for minting and burning - those will be automatically/
+        programatically executed from within the token contract mint or burn functions respectively */
+        if (existingProposal.tokenSupplyChange != 0 && msg.sender != tokenContractAddress) {
+            revert ProposalManagement__ProposalTypeIsMintOrBurn();
+        }
+
         if (existingProposal.proposalStatus != ProposalStatus.Queued) {
             revert ProposalManagement__ProposalIsNotQueued();
         }
 
-        existingProposal.proposalStatus = ProposalStatus.Queued;
+        existingProposal.proposalStatus = ProposalStatus.Executed;
 
-        // also update the s_DAOProposalsHistory array
-        for (uint256 i = 0; i < s_DAOProposalsHistory.length; i++) {
-            if (s_DAOProposalsHistory[i].id == _proposalId) {
-                s_DAOProposalsHistory[i] = existingProposal;
-
-                break;
-            }
-        }
-
-        // Remove from member proposals history array
-        Proposal[] storage memberProposals = s_memberToMemberProposals[
-            existingProposal.addedBy
-        ];
-
-        for (uint256 i = 0; i < memberProposals.length; i++) {
-            if (memberProposals[i].id == _proposalId) {
-                memberProposals[i] = existingProposal;
-
-                break;
-            }
-        }
-
-        s_proposalCodeNameToProposal[
-            existingProposal.proposalCodeName
-        ] = existingProposal;
-        s_proposalIdToProposal[existingProposal.id] = existingProposal;
-
-        emit DAOProposalManagement(
-            existingProposal.id,
-            // "DAO Proposal updated successfully",
-            existingProposal.proposalCodeName,
-            existingProposal.proposalAction,
-            existingProposal.tokenSupplyChange,
-            msg.sender,
-            block.timestamp,
-            existingProposal.proposalStatus
-        );
+        _handleProposalStatusUpdateFinish(_proposalId, existingProposal);
     }
 
-    function determineProposalStatus(
+    function _determineProposalStatus(
         uint256 _totalMembersCount,
-        uint256 _negativeVotes,
         uint256 _positiveVotes,
+        uint256 _negativeVotes,
         Proposal memory _proposal
     ) private pure returns (ProposalStatus) {
         if (
@@ -503,12 +461,16 @@ contract Base__ProposalManagement is MembershipAuth, OnlyOwnerAuth {
 
     function updateDAOProposalStatus__FailOrSuccess(
         uint256 _proposalId
-    ) external {
+    ) external returns(uint256, uint256, uint256, Proposal memory, ProposalStatus) {
         // to be called from the externally deployed "Core__Voting" contract
         _checkIds(_proposalId);
         _verifyIsAdmin(msg.sender);
 
         Proposal storage existingProposal = s_proposalIdToProposal[_proposalId];
+
+        if(!existingProposal.exists) {
+            revert ProposalManagement__ProposalNotFound();
+        }
 
         uint256 totalMembersCount = s_membershipContract__Base.getDAOMembers().length;
         (
@@ -517,57 +479,47 @@ contract Base__ProposalManagement is MembershipAuth, OnlyOwnerAuth {
         ) = s_votingContract__base.getDAOVoteCountsOnProposal(_proposalId);
         // uint256 totalProposalVotes = totalNegativeVotes + totalPositiveVotes;
 
-        ProposalStatus status = determineProposalStatus(
+        ProposalStatus status = _determineProposalStatus(
             totalMembersCount,
             totalPositiveVotes,
             totalNegativeVotes,
             existingProposal
         );
 
+        // if(status != ProposalStatus.Failed && status != ProposalStatus.Successful) {
+        //     revert ProposalManagement__ProposalStillInProgress();
+        // }
+
         existingProposal.proposalStatus = status;
-
-        // also update the s_DAOProposalsHistory array
-        for (uint256 i = 0; i < s_DAOProposalsHistory.length; i++) {
-            if (s_DAOProposalsHistory[i].id == _proposalId) {
-                s_DAOProposalsHistory[i] = existingProposal;
-
-                break;
-            }
-        }
-
-        // Remove from member proposals history array
-        Proposal[] storage memberProposals = s_memberToMemberProposals[
-            existingProposal.addedBy
-        ];
-
-        for (uint256 i = 0; i < memberProposals.length; i++) {
-            if (memberProposals[i].id == _proposalId) {
-                memberProposals[i] = existingProposal;
-
-                break;
-            }
-        }
-
-        s_proposalCodeNameToProposal[
-            existingProposal.proposalCodeName
-        ] = existingProposal;
-        s_proposalIdToProposal[existingProposal.id] = existingProposal;
 
         /* NB: only the proposal id(which cannot changed or be updated) should be added(linked) to a vote. This will 
        prevent the need to handle the gas-intensive process of having to update all platform votes(in case of 
        a proposal update) - to reflect the update on the(their) parent proposal */
 
-        emit DAOProposalManagement(
-            existingProposal.id,
-            // "DAO Proposal updated successfully",
-            existingProposal.proposalCodeName,
-            existingProposal.proposalAction,
-            existingProposal.tokenSupplyChange,
-            msg.sender,
-            block.timestamp,
-            existingProposal.proposalStatus
-        );
+        _handleProposalStatusUpdateFinish(_proposalId, existingProposal);
+
+        return(totalMembersCount,
+            totalPositiveVotes,
+            totalNegativeVotes,
+            existingProposal,
+            status);
+    }   
+
+    // always update with the old proposals state first before attempting to update this - in case a new contract is deployed
+    function updateLedgerIdTracker(uint256 _newCount) public {
+        _verifyIsAdmin(msg.sender);
+
+        if(s_DAOProposalsHistory.length != _newCount) {
+            revert ProposalManagement__NewCountIsInvalid();
+        }
+
+        s_ledgerIdTracker = _newCount;
     }
+
+    function getProposalsLedgerCount() public view returns(uint256) {
+        return s_ledgerIdTracker;
+    }
+
 
     function getProposalById(
         uint256 _proposalId

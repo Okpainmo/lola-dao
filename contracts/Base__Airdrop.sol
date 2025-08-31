@@ -99,6 +99,8 @@ contract Base__Airdrop {
         // re-entrancy guard – mark/set this early
         s_hasReceivedAirdrop[msg.sender] = true;
 
+        /* todo: consider using the manual(low level call option) - as done below, to prevent linter(unsafe ERC20 or similar) errors - even though our
+        contract is as safe as can be. */
         bool success = s_lolaUSDContract__Base.transferFrom(
             s_lolaUSDContract__Core.getContractOwner(),
             msg.sender,

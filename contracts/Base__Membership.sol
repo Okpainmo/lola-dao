@@ -41,27 +41,27 @@ contract Base__Membership is MembershipAuth  {
         }
     }
     
-    function addDAOMember(address _address) external {
-        _verifyIsAddress(_address);
+    function joinDAO() external {
+        _verifyIsAddress(msg.sender);
 
-        if((s_lolaUSDContract__Base.balanceOf(_address) * 10 ** s_lolaUSDContract__Base.decimals()) < s_minimumMembershipBalanceRequirement) {
+        if((s_lolaUSDContract__Base.balanceOf(msg.sender) * 10 ** s_lolaUSDContract__Base.decimals()) < s_minimumMembershipBalanceRequirement) {
             revert Membership__InsufficientMembershipBalance();
         }
 
-        if(s_isDAOMember[_address]) {
+        if(s_isDAOMember[msg.sender]) {
             revert Membership__DAOMemberAlreadyExist();
         }
 
-        DAOMember memory newMember = DAOMember(_address, block.timestamp);
+        DAOMember memory newMember = DAOMember(msg.sender, block.timestamp);
 
         // s_isDAOMember - from MembershipAuth.sol
-        s_isDAOMember[_address] = true;
+        s_isDAOMember[msg.sender] = true;
 
-        s_DAOMemberAddressToProfile[_address] = newMember;
+        s_DAOMemberAddressToProfile[msg.sender] = newMember;
         s_governanceDAOMembers.push(newMember);
 
-        // s_DAOMemberAddressToProfile[_address] = DAOMember(_address, block.timestamp);
-        emit DAOMembersManagement("DAO member added successfully", _address, block.timestamp);
+        // s_DAOMemberAddressToProfile[msg.sender] = DAOMember(msg.sender, block.timestamp);
+        emit DAOMembersManagement("DAO member added successfully", msg.sender, block.timestamp);
     }
 
     function removeDAOMember(address _memberAddress) external { // must reference the externally deployed admin management contract not directly

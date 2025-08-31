@@ -10,8 +10,8 @@ import "./interfaces/IMembership__Base.sol";
 import "./interfaces/IAdminManagement__Base.sol";
 
 contract Base__Voting is MembershipAuth, OnlyOwnerAuth {
-    // error Voting__NotDAOMember();
-    // error Voting__ZeroAddressError();
+    error Voting__NotDAOMember();
+    error Voting__ZeroAddressError();
     // error Voting__InvalidMemberId();
     error Voting__InvalidIdError();
     error Voting__EmptyProposalCodeName();
@@ -49,18 +49,18 @@ contract Base__Voting is MembershipAuth, OnlyOwnerAuth {
         uint256 timestamp
     );
 
-    uint256 internal s_minimumVotingBalanceRequirement = 10 * 10 ** 18; // 10 USDL
+    uint256 internal s_minimumVotingBalanceRequirement; 
 
-    mapping(address => Vote[]) public s_memberAddressToMemberVoteHistory;
+    mapping(address => Vote[]) internal s_memberAddressToMemberVoteHistory;
     mapping(address => mapping(uint256 => Vote))
-        public s_memberAddressToProposalIdToVote;
-    mapping(uint256 => Vote[]) public s_proposalIdToProposalVoteHistory;
-    mapping(uint256 => Vote) public s_voteIdToVote;
+        internal s_memberAddressToProposalIdToVote;
+    mapping(uint256 => Vote[]) internal s_proposalIdToProposalVoteHistory;
+    mapping(uint256 => Vote) internal s_voteIdToVote;
 
     address internal s_lolaUSDCoreContractAddress;
     address internal s_proposalManagementCoreContractAddress;
     address internal s_adminManagementCoreContractAddress;
-    // address internal s_membershipContractAddress;
+    address internal s_membershipContractAddress;
 
     ILolaUSD__Base internal s_lolaUSDContract__Base =
         ILolaUSD__Base(s_lolaUSDCoreContractAddress);
@@ -68,9 +68,15 @@ contract Base__Voting is MembershipAuth, OnlyOwnerAuth {
         IProposalManagement__Base(s_proposalManagementCoreContractAddress);
     IAdminManagement__Base internal s_adminManagementContract__Base =
         IAdminManagement__Base(s_adminManagementCoreContractAddress);
-    // IMembership internal membershipContract = IMembership(s_membershipContractAddress);
+    IMembership__Base internal s_membershipContract__Base = IMembership__Base(s_membershipContractAddress);
 
     Vote[] private s_allVotes;
+
+    function _verifyIsAddress(address _address) internal pure virtual {
+        if (_address == address(0)) {
+            revert Voting__ZeroAddressError();
+        }
+    }
 
     function _checkIds(uint256 _proposalId) internal pure {
         if (_proposalId == 0) revert Voting__InvalidIdError();
@@ -89,14 +95,18 @@ contract Base__Voting is MembershipAuth, OnlyOwnerAuth {
         VoteAction _action
     )
         external
-        // onlyDAOMember(modifier) - from => ProposalManagement.sol -> MembershipAuth.sol
-        onlyDAOMember(msg.sender)
     {
+        bool isMember = s_membershipContract__Base.checkIsDAOMember(msg.sender);
+
+        if(!isMember) {
+            revert Voting__NotDAOMember();
+        }
+        
         _checkIds(_proposalId);
         // _checkProposalCodeName(_proposalCodeName);
 
         if (
-            s_lolaUSDContract__Base.balanceOf(msg.sender) <
+            (s_lolaUSDContract__Base.balanceOf(msg.sender) * 10 ** s_lolaUSDContract__Base.decimals()) <
             s_minimumVotingBalanceRequirement
         ) {
             revert Voting__InsufficientVotingBalance();
@@ -165,7 +175,7 @@ contract Base__Voting is MembershipAuth, OnlyOwnerAuth {
         address _memberAddress,
         uint256 _proposalId
     ) external view returns (Vote memory) {
-        // _verifyIsAddress(function) -       _verifyIsAddress(_memberAddress);
+        _verifyIsAddress(_memberAddress);
         _checkIds(_proposalId);
 
         return (s_memberAddressToProposalIdToVote[_memberAddress][_proposalId]);
@@ -174,7 +184,7 @@ contract Base__Voting is MembershipAuth, OnlyOwnerAuth {
     function getMemberVoteHistory(
         address _memberAddress
     ) external view returns (Vote[] memory) {
-        // _verifyIsAddress(function) -       _verifyIsAddress(_memberAddress);
+        _verifyIsAddress(_memberAddress);
 
         return s_memberAddressToMemberVoteHistory[_memberAddress];
     }
@@ -233,17 +243,21 @@ contract Base__Voting is MembershipAuth, OnlyOwnerAuth {
             _proposalId
         ];
 
-        uint256 approvalsCount;
-        uint256 rejectionsCount;
+        uint256 approvalsCount = 0;
+        uint256 rejectionsCount = 0;
 
         for (uint256 i = 0; i < proposalVotes.length; i++) {
             if (proposalVotes[i].action == VoteAction.Approve) {
-                approvals++;
+                approvalsCount++;
             } else {
-                rejections++;
+                rejectionsCount++;
             }
         }
 
         return (approvalsCount, rejectionsCount);
+    }
+
+    function getMinimumVotingBalance() public view returns(uint256) {
+        return s_minimumVotingBalanceRequirement / 10 ** s_lolaUSDContract__Base.decimals();
     }
 }
