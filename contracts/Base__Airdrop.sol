@@ -74,7 +74,7 @@ contract Base__Airdrop {
     Airdrop[] private s_airdrops;
 
     function airdrop() public {
-        if(!s_isAirdropCampaignActive) {
+        if(!s_isAirdropCampaignActive || s_airdropLimit == 0 || s_airdropAmount == 0) {
             revert AirdropCore__NoActiveAirdropCampaign();
         }
 
