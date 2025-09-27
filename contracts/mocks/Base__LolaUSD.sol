@@ -59,11 +59,13 @@ contract Base__LolaUSD {
     }
 
     function totalSupply() public view returns (uint256) {
-        return s_supply / (10 ** s_tokenDecimals);
+        // return s_supply / (10 ** s_tokenDecimals); // native ERC functions are used by wallets and explorers to calculate balances - do not prettify them
+        return s_supply; 
     }
 
     function balanceOf(address _owner) public view returns (uint256) {
-        return balance[_owner] / (10 ** s_tokenDecimals);
+        // return balance[_owner] / (10 ** s_tokenDecimals); // native ERC functions are used by wallets and explorers to calculate balances - do not prettify them
+        return balance[_owner];
     }
 
     function approve(address _operator, uint256 _value) public returns (bool) {
@@ -84,7 +86,8 @@ contract Base__LolaUSD {
         address _owner,
         address _operator
     ) public view returns (uint256) {
-        return allowedSpend[_owner][_operator] / (10 ** s_tokenDecimals); // check how much a user has allowed an operator to spend
+        // return allowedSpend[_owner][_operator] / (10 ** s_tokenDecimals); // native ERC functions are used by wallets and explorers to calculate balances - do not prettify them
+        return allowedSpend[_owner][_operator];
     }
 
     function increaseAllowance(
